@@ -253,6 +253,10 @@ A fragment shader that reads `gl_SampleID` or `gl_SamplePosition` is marked as n
 
 `CreateTimeQuery` returns a query that does nothing and reports zero, and logs a warning, when the graphics queue family has no valid timestamp bits; writing timestamps on such a family would be invalid usage (`src/Aardvark.Rendering.Vulkan/Resources/Query/TimeQuery.fs`).
 
+### Memory Statistics
+
+`Device.GetMemoryStatistics()` returns one `MemoryHeapStatistics` per memory heap: flags, capacity, the number of blocks and live allocations with their sizes, and the usage and budget the allocator reports (a cheap budget query; usage and budget are accurate when `VK_EXT_memory_budget` is enabled). `Device.PrintMemoryUsage` prints the same figures. Tests use it to check that a frame allocated nothing new.
+
 ### Pipeline Caching
 
 Vulkan caches `VkPipeline` objects (expensive to create):

@@ -359,6 +359,10 @@ type Device private (physicalDevice: PhysicalDevice, extensions: string seq, sel
     member x.PrintMemoryUsage([<Optional; DefaultParameterValue(2)>] verbosity: int) =
         memoryAllocator.PrintUsage verbosity
 
+    /// Returns the current memory statistics of every memory heap, indexed by heap.
+    member x.GetMemoryStatistics() =
+        memoryAllocator.GetStatistics()
+
     interface IDevice with
         member x.VKVM = x.VKVM
         member x.Handle = x.Handle

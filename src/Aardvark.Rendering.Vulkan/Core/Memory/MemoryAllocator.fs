@@ -32,6 +32,35 @@ type IDeviceMemory =
                                   [<Optional; DefaultParameterValue(true)>] bind: bool *
                                   [<Optional; DefaultParameterValue(false)>] mayAlias: bool -> struct (VkImage * DevicePtr)
 
+/// Memory statistics of a single memory heap as reported by the allocator.
+[<Struct>]
+type MemoryHeapStatistics =
+    {
+        /// Flags of the heap.
+        Flags : MemoryHeapFlags
+
+        /// Total size of the heap.
+        Capacity : Mem
+
+        /// Number of memory blocks allocated from the heap.
+        Blocks : uint32
+
+        /// Number of live allocations in the heap.
+        Allocations : uint32
+
+        /// Total size of the memory blocks allocated from the heap.
+        BlockBytes : Mem
+
+        /// Total size of the live allocations in the heap.
+        AllocationBytes : Mem
+
+        /// Estimated memory usage of the process in the heap.
+        Usage : Mem
+
+        /// Estimated memory budget available to the process in the heap.
+        Budget : Mem
+    }
+
 type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativeint, pVkGetDeviceProcAddr: nativeint) =
     let mutable allocator = VmaAllocator.Zero
     do
@@ -239,33 +268,46 @@ type internal MemoryAllocator (device: IDevice, pVkGetInstanceProcAddr: nativein
                 this.CreateImage(&info, preferDevice, hostAccess, priority, export, bind, mayAlias)
         }
 
-    member _.PrintUsage([<Optional; DefaultParameterValue(2)>] verbosity: int) =
-        let l = Logger.Get verbosity
+    /// Returns the current memory statistics of every memory heap, indexed by heap.
+    /// Uses the allocator's budget query, which is cheap.
+    member _.GetStatistics() : MemoryHeapStatistics[] =
         let heaps = device.PhysicalDevice.MemoryHeaps
-
         let heapBudgets = Array.zeroCreate<VmaBudget> heaps.Length
         use pHeapBudgets = fixed heapBudgets
         Vma.getHeapBudgets(allocator, pHeapBudgets)
 
-        for i = 0 to heaps.Length - 1 do
-            let h = heaps.[i]
+        heaps |> Array.mapi (fun i h ->
             let b = heapBudgets.[i]
+            { Flags           = h.Flags
+              Capacity        = h.Capacity
+              Blocks          = b.statistics.blockCount
+              Allocations     = b.statistics.allocationCount
+              BlockBytes      = Mem b.statistics.blockBytes
+              AllocationBytes = Mem b.statistics.allocationBytes
+              Usage           = Mem b.usage
+              Budget          = Mem b.budget }
+        )
 
+    member x.PrintUsage([<Optional; DefaultParameterValue(2)>] verbosity: int) =
+        let l = Logger.Get verbosity
+
+        x.GetStatistics() |> Array.iteri (fun i s ->
             let heapFlags =
-                if h.Flags.HasFlag MemoryHeapFlags.DeviceLocal then $" (device local)"
+                if s.Flags.HasFlag MemoryHeapFlags.DeviceLocal then $" (device local)"
                 else ""
 
             l.section $"Heap {i}{heapFlags}" (fun _ ->
-                l.line $"Capacity: {h.Capacity}"
-                l.line $"Allocated: {Mem b.statistics.allocationBytes}"
-                l.line $"Available: {h.Capacity - Mem b.statistics.allocationBytes}"
+                l.line $"Capacity: {s.Capacity}"
+                l.line $"Allocated: {s.AllocationBytes}"
+                l.line $"Available: {s.Capacity - s.AllocationBytes}"
 
                 let warning =
-                    if b.usage > b.budget then " (!!!)"
+                    if s.Usage > s.Budget then " (!!!)"
                     else ""
 
-                l.line $"Budget: {Mem b.usage} / {Mem b.budget}{warning}"
+                l.line $"Budget: {s.Usage} / {s.Budget}{warning}"
             )
+        )
 
     member _.Dispose() =
         if allocator <> VmaAllocator.Zero then
