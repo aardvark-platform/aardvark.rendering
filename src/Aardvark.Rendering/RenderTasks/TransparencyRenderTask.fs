@@ -424,6 +424,7 @@ module TransparencyRenderTask =
     let private isTransparent (o : IRenderObject) =
         match o with
         | :? RenderObject as r -> r.IsTransparent
+        | :? HeapRenderObject as h -> h.IsTransparent
         | :? SignatureDependentRenderObject as s -> s.IsTransparent   // split before the expansion
         | _ -> false
 
@@ -564,14 +565,22 @@ module TransparencyRenderTask =
                                   ColorWriteMask      = AVal.constant ColorMask.None
                                   AttachmentWriteMask = AVal.constant Map.empty }
         copy.Uniforms      <- UniformProvider.union (aBufferImageUniforms count slot) ro.Uniforms
-        copy :> IRenderObject
+        copy
+
+    /// Routes a transparent HeapRenderObject by applying a per-object transparency
+    /// transform to each of its page draws and re-bundling them with the same
+    /// derives. The draws are RenderObjects with a Surface.Effect, so the effect
+    /// transforms apply as usual, and the unit keeps its derive, barrier, draw
+    /// ordering, so the data is freshly derived for this pass as well.
+    let private transformHeap (f : RenderObject -> IRenderObject) (h : HeapRenderObject) : IRenderObject =
+        let draws = h.Draws |> List.map (fun d -> match d with | :? RenderObject as r -> f r | other -> other)
+        HeapRenderObject(h.RenderPass, h.AttributeScope, h.Derives, draws, h.IsPickable)
 
     /// Fullscreen quad that resolves the A-buffer and composites it over the
     /// opaque scene with premultiplied "over".
     let private buildABufferResolveObject
                     (count : aval<ITexture>) (slot : aval<ITexture>) : RenderObject =
-        let buffer = AVal.constant (ArrayBuffer fullscreenPositions :> IBuffer)
-        let view   = BufferView(buffer, typeof<V3f>)
+        let view   = BufferView(fullscreenPositions)
         let attrs  = AttributeProvider.ofList [ DefaultSemantic.Positions, view ]
         let drawCall = DrawCallInfo(FaceVertexCount = 4, InstanceCount = 1)
 
@@ -642,6 +651,7 @@ module TransparencyRenderTask =
                 if isTransparent o then
                     match o with
                     | :? RenderObject as r -> Some (transformTransparent r)
+                    | :? HeapRenderObject as h -> Some (transformHeap transformTransparent h)
                     | _ -> None
                 else None)
 
@@ -654,6 +664,7 @@ module TransparencyRenderTask =
                 if isTransparent o then
                     match o with
                     | :? RenderObject as r -> Some (transformTransparentPick r)
+                    | :? HeapRenderObject as h -> Some (transformHeap transformTransparentPick h)
                     | _ -> None
                 else None)
 
@@ -677,6 +688,8 @@ module TransparencyRenderTask =
                     match o with
                     | :? RenderObject as r ->
                         Some (transformTransparentABuffer abCountTex abSlotTex r)
+                    | :? HeapRenderObject as h ->
+                        Some (transformHeap (transformTransparentABuffer abCountTex abSlotTex) h)
                     | _ -> None
                 else None)
 

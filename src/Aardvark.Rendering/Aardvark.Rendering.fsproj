@@ -107,6 +107,7 @@
     <Compile Include="Runtime\Query\QueryTypes.fs" />
     <Compile Include="Runtime\Query\QueryRuntime.fs" />
     <Compile Include="Runtime\Compute\Compute.fs" />
+    <Compile Include="Pipeline\RenderObject\HeapRenderObject.fs" />
     <Compile Include="Runtime\Compute\ComputeExtensions.fs" />
     <Compile Include="Runtime\Compute\MutableInputBinding.fs" />
     <Compile Include="Runtime\Raytracing\RaytracingRuntime.fs" />

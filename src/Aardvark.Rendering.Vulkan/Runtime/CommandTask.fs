@@ -878,6 +878,82 @@ module private RuntimeCommands =
             prepared <- ValueSome o
             true
 
+    /// Records a HeapRenderObject as one command-buffer unit: each derive becomes a
+    /// DispatchCommand registered in compiler.dispatches, which is replayed before
+    /// BeginRenderPass and ends with a compute-to-vertex barrier, and each page draw is
+    /// recorded inside the pass. The derives and the draws share this task's submission,
+    /// so every draw reads its page's freshly derived data and no split into several
+    /// render tasks can separate them.
+    and HeapRenderObjectCommand(compiler : Compiler, o : HeapRenderObject) =
+        inherit PreparedCommand()
+
+        let mutable prepared : list<PreparedMultiRenderObject> = []
+        let mutable dispatches : list<DispatchCommand> = []
+
+        override x.GroupKey =
+            match prepared with
+            | p :: _ -> [ p.First.Pipeline :> obj; p.Id :> obj ]
+            | [] -> [ o.Id :> obj ]
+
+        override x.Free() =
+            for d in dispatches do d.Free()      // removes it from compiler.dispatches, frees its descriptor and stream
+            dispatches <- []
+            for p in prepared do
+                for c in p.Children do
+                    for r in c.Resources do compiler.resources.Remove r
+                p.Dispose()
+            prepared <- []
+
+        override x.Compile(token, stream) =
+            // Recompile: reset the previous generation first. Update passes the
+            // command's persistent stream, so without Clear every recompile (one per
+            // change of the heap's membership) would append the full page-draw
+            // sequence and the scene would render once more per recompile. The same
+            // holds for the derive dispatches, which would otherwise linger in
+            // compiler.dispatches and replay every frame.
+            // The prepared draws are not disposed: PrepareRenderObject is cached by
+            // the resource manager per render object, and disposing them would serve
+            // dead descriptors. Adding them to the resource set below is idempotent.
+            stream.Clear()
+            for d in dispatches do d.Free()
+            dispatches <- []
+            // 1) derives: compute dispatches replayed before the render pass. Each writes
+            //    its page's data and its stream ends with a compute-to-vertex barrier.
+            dispatches <-
+                o.Derives |> List.map (fun (input, groups) ->
+                    let d = new DispatchCommand(compiler, compiler.manager.GetComputeInputBinding input, groups)
+                    compiler.dispatches.Add d
+                    // deliberately not recorded here: the replay before the pass
+                    // re-records every dispatch each frame with the task's token (fresh
+                    // descriptor pointer and group count). Recording with the compile
+                    // token would subscribe this whole command to the dispatch arguments
+                    // (the group-count values change with every membership change of
+                    // the heap) and force a full recompile on every content-only change.
+                    d
+                )
+            // 2) draws: recorded inside the pass; they read the freshly derived data (same submission)
+            prepared <-
+                o.Draws |> List.map (fun draw ->
+                    let hooked : IRenderObject =
+                        match draw with
+                        | :? RenderObject as ro -> compiler.task.HookRenderObject ro :> IRenderObject
+                        | other -> other
+                    let p = compiler.manager.PrepareRenderObject(compiler.renderPass, hooked)
+                    for c in p.Children do
+                        for r in c.Resources do compiler.resources.Add r
+                        stream.IndirectBindPipeline(VkPipelineBindPoint.Graphics, c.Pipeline.Pointer) |> ignore
+                        stream.IndirectBindDescriptorSets(c.DescriptorSets.Pointer) |> ignore
+                        match c.Viewport with ValueSome vp -> stream.SetViewport(0u, 1u, vp.Pointer) |> ignore | _ -> ()
+                        match c.Scissor with ValueSome sc -> stream.SetScissor(0u, 1u, sc.Pointer) |> ignore | _ -> ()
+                        match c.PushConstants with ValueSome pc -> stream.PushConstants(c.PipelineLayout.Handle, pc.Handle) |> ignore | _ -> ()
+                        match c.IndexBuffer with ValueSome ib -> stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore | _ -> ()
+                        stream.IndirectBindVertexBuffers(c.VertexBuffers.Pointer) |> ignore
+                        stream.IndirectDraw(compiler.stats, c.IsActive.Pointer, c.DrawCalls.Pointer) |> ignore
+                    p
+                )
+
+            true
+
     and [<AbstractClass>] CommandBucket() =
         inherit AdaptiveObject()
 
@@ -1141,6 +1217,7 @@ module private RuntimeCommands =
         let compile (o : IRenderObject) =
             match o with
             | :? CommandRenderObject as o -> compiler.Compile o.Command
+            | :? HeapRenderObject as o -> new HeapRenderObjectCommand(compiler, o) :> PreparedCommand
             | :? ActivationRenderObject as o -> new ActivationCommand(o) :> PreparedCommand
             | _ -> new RenderObjectCommand(compiler, o) :> PreparedCommand
 
