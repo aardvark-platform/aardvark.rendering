@@ -748,18 +748,22 @@ module private RuntimeCommands =
                 and set n = x.Next <- n
 
         abstract member GroupKey : list<obj>
-        abstract member Compile : AdaptiveToken * VKVM.CommandStream -> unit
+
+        /// Compiles the command into the given stream and returns whether the stream changed.
+        abstract member Compile : AdaptiveToken * VKVM.CommandStream -> bool
+
         abstract member Free : unit -> unit
 
         default x.GroupKey = [id :> obj]
 
         member x.Stream = check(); stream
 
+        /// Updates the command if it is out of date and returns whether its stream changed.
         member x.Update(t : AdaptiveToken) =
             check()
-            x.EvaluateIfNeeded t () (fun t ->
+            x.EvaluateIfNeeded t false (fun t ->
                 x.Compile(t, stream)
-            ) 
+            )
 
         member x.Dispose() =
             check()
@@ -776,7 +780,7 @@ module private RuntimeCommands =
     and EmptyCommand() =
         inherit PreparedCommand()
 
-        override x.Compile(_,_) = ()
+        override x.Compile(_,_) = false
         override x.Free() = ()
 
     /// Renders nothing. It only holds the ActivationRenderObject's activation for
@@ -786,7 +790,7 @@ module private RuntimeCommands =
 
         let activation = o.Activate()
 
-        override x.Compile(_,_) = ()
+        override x.Compile(_,_) = false
         override x.Free() = activation.Dispose()
 
     /// Rendering a single IRenderObject
@@ -872,6 +876,7 @@ module private RuntimeCommands =
                 stream.IndirectDraw(compiler.stats, o.IsActive.Pointer, o.DrawCalls.Pointer) |> ignore
 
             prepared <- ValueSome o
+            true
 
     and [<AbstractClass>] CommandBucket() =
         inherit AdaptiveObject()
@@ -927,7 +932,7 @@ module private RuntimeCommands =
         let firstCommand =
             { new PreparedCommand() with
                 override x.Free() = ()
-                override x.Compile(_,_) = ()
+                override x.Compile(_,_) = false
             }
 
         let trie = OrderMaintenanceTrie<obj,PreparedCommand>()
@@ -996,13 +1001,13 @@ module private RuntimeCommands =
         let firstCommand =
             { new PreparedCommand() with
                 override x.Free() = ()
-                override x.Compile(_,_) = ()
+                override x.Compile(_,_) = false
             }
 
         let lastCommand =
             { new PreparedCommand() with
                 override x.Free() = ()
-                override x.Compile(_,_) = ()
+                override x.Compile(_,_) = false
             }
 
         do firstCommand.Next <- ValueSome lastCommand
@@ -1142,7 +1147,7 @@ module private RuntimeCommands =
         let insert (token : AdaptiveToken) (o : IRenderObject) =
             // insert cmd into trie (link programs)
             let cmd = compile o
-            cmd.Update token
+            cmd.Update token |> ignore
 
             let bucket = getBucket o.RenderPass
             bucket.Add cmd
@@ -1191,19 +1196,27 @@ module private RuntimeCommands =
             deltas |> HashSetDelta.iter (insert token) (remove)
 
             // get and update the dirty PreparedCommands (can be non-empty due to CommandNode)
-            for cmd in dirty.GetAndClear() do
-                if isValid cmd then cmd.Update token
+            let dirtyCmds = dirty.GetAndClear()
+            for cmd in dirtyCmds do
+                if isValid cmd then cmd.Update token |> ignore
 
-            for (KeyValue(_,b)) in trie do
-                b.Update token
+            // An update without deltas and dirty commands (a content-only change marked
+            // the tree) keeps the existing stream and reports no change.
+            if deltas.Count = 0 && dirtyCmds.Count = 0 then
+                false
+            else
+                for (KeyValue(_,b)) in trie do
+                    b.Update token |> ignore
 
-            // rebuild the top-level stream
-            stream.Clear()
-            match firstBucket with
-            | ValueSome first ->
-                stream.Call(first.First.Stream) |> ignore
-            | ValueNone ->
-                ()
+                // rebuild the top-level stream
+                stream.Clear()
+                match firstBucket with
+                | ValueSome first ->
+                    stream.Call(first.First.Stream) |> ignore
+                | ValueNone ->
+                    ()
+
+                true
 
 
     /// Clearing the current Framebuffer using the supplied values
@@ -1296,6 +1309,8 @@ module private RuntimeCommands =
                     |]
                 ) |> ignore
 
+            true
+
         override x.Free() =
             ()
 
@@ -1335,7 +1350,7 @@ module private RuntimeCommands =
                 | None -> ()
 
                 let cmd = compiler.Compile v
-                cmd.Update(token)
+                cmd.Update(token) |> ignore
 
                 match l with
                 | Some(_,l) ->
@@ -1379,11 +1394,12 @@ module private RuntimeCommands =
 
             // update all dirty inner commands
             for cmd in dirty.GetAndClear() do
-                if isValid cmd then cmd.Update token
+                if isValid cmd then cmd.Update token |> ignore
 
             // refill the top-level stream
             stream.Clear()
             stream.Call(first) |> ignore
+            true
 
         override x.Free() =
             reader <- Unchecked.defaultof<_>
@@ -1412,13 +1428,14 @@ module private RuntimeCommands =
             let cond = condition.GetValue(token)
 
             // update both branches (TODO: is that really desired?
-            ifTrue.Update(token)
-            ifFalse.Update(token)
+            ifTrue.Update(token) |> ignore
+            ifFalse.Update(token) |> ignore
 
             // update the stream
             stream.Clear()
             if cond then stream.Call(ifTrue.Stream) |> ignore
             else stream.Call(ifFalse.Stream) |> ignore
+            true
             
     /// Conditionally dispatching between two commands (while keeping only the active one alive)
     and StructuralIfThenElseCommand(compiler : Compiler, condition : aval<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
@@ -1449,12 +1466,13 @@ module private RuntimeCommands =
 
                 // the new one needs to be compiled (and cached)
                 let newCmd = compiler.Compile(newCmd)
-                newCmd.Update(token)
+                newCmd.Update(token) |> ignore
                 cache <- ValueSome(cond, newCmd)
 
                 // the stream also needs to be updated
                 stream.Clear()
                 stream.Call(newCmd.Stream) |> ignore
+                true
 
     /// Rendering a single Geometry using the given PreparedPipelineState
     and GeometryCommand(compiler : Compiler, pipeline : PreparedPipelineState, geometry : Geometry, async : bool) =
@@ -1509,6 +1527,7 @@ module private RuntimeCommands =
 
             stream.IndirectBindVertexBuffers(pg.pgAttributes.Pointer) |> ignore
             stream.IndirectDraw(compiler.stats, alwaysActive, pg.pgCall.Pointer) |> ignore
+            true
 
     /// Rendering a set of Geometries using the given Surface
     and GroupedCommand(compiler : Compiler, surface : Aardvark.Rendering.Surface, state : PipelineState, geometries : aset<Geometry>) =
@@ -1548,7 +1567,7 @@ module private RuntimeCommands =
         let add (token : AdaptiveToken) (pipeline : PreparedPipelineState) (g : Geometry) =
             // create and update a GeometryCommand
             let cmd = new GeometryCommand(compiler, pipeline, g, false)
-            cmd.Update token
+            cmd.Update token |> ignore
 
             // store it in the cache
             cache.[g] <- cmd
@@ -1603,6 +1622,7 @@ module private RuntimeCommands =
             let pipeline = getPipeline stream
             let ops = reader.GetChanges token
             ops |> HashSetDelta.iter (add token pipeline) (remove)
+            true
 
     and BindPipelineCommand(compiler : Compiler, surface : Aardvark.Rendering.Surface, state : PipelineState) =
         inherit PreparedCommand()
@@ -1626,6 +1646,7 @@ module private RuntimeCommands =
 
             stream.Clear()
             stream.IndirectBindPipeline(VkPipelineBindPoint.Graphics, pipeline.ppPipeline.Pointer) |> ignore
+            true
 
 
     and LodTreeCommand(compiler : Compiler, surface : Aardvark.Rendering.Surface, state : PipelineState, loader : LodTreeLoader<Geometry>) as this =
@@ -1752,7 +1773,7 @@ module private RuntimeCommands =
 
         override x.Compile(token, stream) =
             Log.line "update"
-            first.Update(token)
+            first.Update(token) |> ignore
 
             if not running then 
                 running <- true
@@ -1776,7 +1797,7 @@ module private RuntimeCommands =
             lock hinig (fun () -> hinig.AddRange dead; Monitor.PulseAll hinig)
 
             //innerCompiler.resources.Update(token) |> ignore
-            ()
+            true
 
     and Reader<'a> = AdaptiveToken -> HashSet<'a> -> HashSetDelta<'a>
 
@@ -2119,6 +2140,8 @@ module private RuntimeCommands =
                         totalCount <- totalCount + indirect.Count
                     | _ ->
                         ()
+
+            true
     
 
 
@@ -2205,7 +2228,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         lock compiled (fun () ->
             if compiled.OutOfDate then
                 compiled.Update token
-                true
             else
                 false
         )

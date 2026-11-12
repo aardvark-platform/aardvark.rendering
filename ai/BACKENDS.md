@@ -197,6 +197,8 @@ Vulkan records commands into `VkCommandBuffer` via native VKVM library:
 - Multi-threading: record commands on multiple threads in parallel
 - Explicit synchronization: no implicit state tracking
 
+A prepared command reports whether its stream changed when it is compiled or updated, and the command task re-records its command buffer only when a command reported a change or the output or the resources changed. A content-only change that marks the tree keeps the recorded buffer (`PrintRenderTaskRecompile` logs the cause of each re-recording).
+
 ### VKVM Integration
 
 VKVM is a **Vulkan helper library** (P/Invoke via `Aardvark.Rendering.Vulkan.Wrapper`):
