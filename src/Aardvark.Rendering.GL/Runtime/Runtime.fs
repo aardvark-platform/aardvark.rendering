@@ -146,6 +146,9 @@ type Runtime(debug : IDebugConfig) =
         member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, size : uint64, discard : bool) =
             x.Copy(src, srcOffset, dst, dstOffset, size, discard)
 
+        member x.Copy(src : IBackendBuffer, dst : IBackendBuffer, regions : BufferCopyRegion[]) =
+            x.Copy(src, dst, regions)
+
         member x.DownloadAsync(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, size : uint64) : unit -> unit =
             raise <| NotImplementedException()
 
@@ -396,6 +399,22 @@ type Runtime(debug : IDebugConfig) =
 
         GL.Dispatch.CopyNamedBufferSubData(src.Handle, dst.Handle, nativeint srcOffset, nativeint dstOffset, nativeint sizeInBytes)
         GL.Check "could not copy buffer data"
+
+        if RuntimeConfig.SyncUploadsAndFrames then
+            GL.Sync()
+
+    member x.Copy(src : IBackendBuffer, dst : IBackendBuffer, regions : BufferCopyRegion[]) =
+        for r in regions do
+            src |> ResourceValidation.Buffers.validateRange r.SrcOffset r.SizeInBytes
+            dst |> ResourceValidation.Buffers.validateRange r.DstOffset r.SizeInBytes
+
+        use __ = ctx.ResourceLock
+        let src = unbox<Buffer> src
+        let dst = unbox<Buffer> dst
+
+        for r in regions do
+            GL.Dispatch.CopyNamedBufferSubData(src.Handle, dst.Handle, nativeint r.SrcOffset, nativeint r.DstOffset, nativeint r.SizeInBytes)
+            GL.Check "could not copy buffer data"
 
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()

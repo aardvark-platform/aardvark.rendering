@@ -133,6 +133,9 @@ module BufferViewBoundaries =
                 ResourceValidation.Buffers.validateRange dstOffset sizeInBytes dst
                 calls.Add <| CopyCall(srcOffset, dstOffset, sizeInBytes, discard)
 
+            member _.Copy(_, _, _ : BufferCopyRegion[]) =
+                raise <| NotSupportedException()
+
     let private expectCalls (runtime : RecordingRuntime) (expected : TransferCall array) =
         Expect.sequenceEqual runtime.Calls expected "unexpected backing-buffer transfer window"
 

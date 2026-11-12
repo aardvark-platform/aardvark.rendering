@@ -73,6 +73,8 @@ Describes how buffer elements are accessed.
 
 **AdaptiveBuffer:** `Resize` marks the buffer outdated in a transaction. `ResizeInPlace` only records the new size, which the next handle computation or write applies, and exists for subclasses that grow the buffer from inside their own `Compute` override, where marking is not allowed.
 
+**Multi-region copies:** `IBufferRuntime.Copy(src, dst, regions : BufferCopyRegion[])` copies several regions (`SrcOffset`, `DstOffset`, `SizeInBytes`) in one operation; regions must not overlap when source and destination are the same buffer. Vulkan records one copy command and flushes a host-visible source first.
+
 ### ITexture Types
 
 | Type | Members |

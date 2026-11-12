@@ -69,6 +69,7 @@ module ManagedBuffer =
                 failwith "DownloadAsync is not used by these tests"
 
             member _.Copy(_, _, _, _, _, _) = ()
+            member _.Copy(_, _, _ : BufferCopyRegion[]) = ()
 
     module private Helpers =
 

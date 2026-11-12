@@ -307,6 +307,15 @@ type Runtime(device : Device) as this =
         let dst = unbox<Buffer> dst
         Buffer.copy src srcOffset dst dstOffset sizeInBytes
 
+    member x.Copy(src : IBackendBuffer, dst : IBackendBuffer, regions : BufferCopyRegion[]) =
+        for r in regions do
+            src |> ResourceValidation.Buffers.validateRange r.SrcOffset r.SizeInBytes
+            dst |> ResourceValidation.Buffers.validateRange r.DstOffset r.SizeInBytes
+
+        let src = unbox<Buffer> src
+        let dst = unbox<Buffer> dst
+        Buffer.copyRegions src dst regions
+
     // upload
     member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format,
                                             [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
@@ -665,6 +674,9 @@ type Runtime(device : Device) as this =
 
         member x.Copy(src : IBackendBuffer, srcOffset : uint64, dst : IBackendBuffer, dstOffset : uint64, size : uint64, _discard : bool) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
+
+        member x.Copy(src : IBackendBuffer, dst : IBackendBuffer, regions : BufferCopyRegion[]) =
+            x.Copy(src, dst, regions)
 
         member x.DownloadAsync(src : IBackendBuffer, srcOffset : uint64, dst : nativeint, size : uint64) =
             x.DownloadAsync(src, srcOffset, dst, size)

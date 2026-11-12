@@ -15,12 +15,19 @@ type DevicePtr =
     val mutable private allocation : VmaAllocation
     val private allocationInfo : VmaAllocationInfo2
     val private hostVisible : bool
+    val private hostCoherent : bool
     val mutable private externalBlock : ExternalMemoryBlock
 
     internal new (device: IDevice, allocator: VmaAllocator, allocation: VmaAllocation, hostVisible: bool, export: bool) =
         let mutable info = VmaAllocationInfo2.Empty
         use pInfo = fixed &info
         Vma.getAllocationInfo2(allocator, allocation, pInfo)
+
+        let hostCoherent =
+            let mutable flags = enum<VkMemoryPropertyFlags> 0
+            use pFlags = fixed &flags
+            Vma.getAllocationMemoryProperties(allocator, allocation, pFlags)
+            flags.HasFlag VkMemoryPropertyFlags.HostCoherentBit
 
         let externalBlock =
             if export then
@@ -39,6 +46,7 @@ type DevicePtr =
           allocation     = allocation
           allocationInfo = info
           hostVisible    = hostVisible
+          hostCoherent   = hostCoherent
           externalBlock  = externalBlock }
 
     internal new (device: IDevice) =
@@ -47,6 +55,7 @@ type DevicePtr =
           allocation     = VmaAllocation.Zero
           allocationInfo = VmaAllocationInfo2.Empty
           hostVisible    = false
+          hostCoherent   = false
           externalBlock  = null }
 
     member this.ExternalBlock : IExternalMemoryBlock =
@@ -85,6 +94,13 @@ type DevicePtr =
     /// Copy from the allocation to the given host memory pointer.
     member this.CopyTo(size: uint64, dst: nativeint) =
         this.CopyTo(0UL, size, dst)
+
+    /// Flush a range of a host-visible allocation so host writes through the mapped
+    /// pointer become device-visible (no-op for coherent or device-local memory).
+    member this.Flush(offset: uint64, size: uint64) =
+        if this.hostVisible && not this.hostCoherent then
+            Vma.flushAllocation(this.allocator, this.allocation, offset, size)
+                |> checkf "could not flush memory allocation"
 
     member this.Mapped (offset: uint64, size: uint64, action: nativeint -> 'T) =
         if not this.hostVisible then

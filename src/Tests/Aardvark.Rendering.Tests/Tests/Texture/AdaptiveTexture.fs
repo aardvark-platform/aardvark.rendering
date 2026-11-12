@@ -123,6 +123,7 @@ module AdaptiveTexture =
                 member _.Download(_, _, _, _) = unexpected()
                 member _.DownloadAsync(_, _, _, _) = unexpected()
                 member _.Copy(_, _, _, _, _, _) = unexpected()
+                member _.Copy(_, _, _ : BufferCopyRegion[]) = unexpected()
 
         type private Fixture(isArray : bool) =
             let runtime = Runtime()
