@@ -4,6 +4,26 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering
 
+/// Used when the queue family reports timestampValidBits = 0 (timestamps are
+/// optional per queue family; writing them anyway is invalid usage).
+type internal EmptyTimeQuery() =
+    interface IQuery with
+        member x.Begin() = ()
+        member x.End() = ()
+        member x.Reset() = ()
+
+    interface IVulkanQuery with
+        member x.Begin(_) = ()
+        member x.End(_) = ()
+
+    interface ITimeQuery with
+        member x.HasResult() = true
+        member x.TryGetResult(_, _) = Some MicroTime.Zero
+        member x.GetResult(_, _) = MicroTime.Zero
+
+    interface IDisposable with
+        member x.Dispose() = ()
+
 type TimeQuery(device : Device) =
     inherit Query(device, QueryType.Timestamp, 2)
 

@@ -249,6 +249,10 @@ let surface = runtime.PrepareEffect(fboSig, myEffect, mode)
 
 A fragment shader that reads `gl_SampleID` or `gl_SamplePosition` is marked as needing sample shading (`ShaderProgram.SampleShading`). Multisampled pipelines built from such a program set `sampleShadingEnable` with `minSampleShading = 1.0`, so the shader runs once per sample; Vulkan has no equivalent of the GL rule that `gl_SampleID` forces per-sample shading. `gl_SampleMaskIn` alone does not trigger it: it is available at pixel rate too and then yields the primitive's whole coverage mask. Source: `src/Aardvark.Rendering.Vulkan/Resources/Shaders/ShaderProgram.fs`, `Resources/Pipeline/PipelineStates.fs`.
 
+### Time Queries
+
+`CreateTimeQuery` returns a query that does nothing and reports zero, and logs a warning, when the graphics queue family has no valid timestamp bits; writing timestamps on such a family would be invalid usage (`src/Aardvark.Rendering.Vulkan/Resources/Query/TimeQuery.fs`).
+
 ### Pipeline Caching
 
 Vulkan caches `VkPipeline` objects (expensive to create):
