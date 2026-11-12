@@ -8,7 +8,9 @@ type DeviceQueueFamily private (device: IDevice, info: QueueFamilyInfo) =
     let currentQueue = new ThreadLocal<DeviceQueue voption>(fun () -> ValueNone)
 
     let mutable currentToken : ThreadLocal<DeviceToken> = null
-    let mutable availableQueues : ConcurrentBag<DeviceQueue> = null
+    // Not a ConcurrentBag: its thread-local storage would keep the family, and with it the device, alive for as long as
+    // any thread that added or took a queue lives.
+    let mutable availableQueues : ConcurrentQueue<DeviceQueue> = null
     let mutable availableQueueCount : SemaphoreSlim = null
 
     let supportedStages =
@@ -16,12 +18,12 @@ type DeviceQueueFamily private (device: IDevice, info: QueueFamilyInfo) =
 
     let releaseQueueHandle (handle: DeviceQueueHandle) =
         currentQueue.Value <- ValueNone
-        availableQueues.Add handle.Queue
+        availableQueues.Enqueue handle.Queue
         availableQueueCount.Release() |> ignore
 
     member private x.Initialize(onDispose: IObservable<unit>) =
         let queues = Array.init info.count (fun index -> new DeviceQueue(x, index))
-        availableQueues <- ConcurrentBag<DeviceQueue>(queues)
+        availableQueues <- ConcurrentQueue<DeviceQueue>(queues)
         availableQueueCount <- new SemaphoreSlim(availableQueues.Count)
         let getCurrentQueue() = x.CurrentQueue
         currentToken <- new ThreadLocal<DeviceToken>(fun () -> new DeviceToken(x, getCurrentQueue, onDispose))
@@ -52,7 +54,7 @@ type DeviceQueueFamily private (device: IDevice, info: QueueFamilyInfo) =
             availableQueueCount.Wait()
 
             let queue =
-                match availableQueues.TryTake() with
+                match availableQueues.TryDequeue() with
                 | true, q -> q
                 | _ -> failf "failed to get queue"
 
