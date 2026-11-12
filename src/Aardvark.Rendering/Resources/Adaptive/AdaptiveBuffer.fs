@@ -227,6 +227,24 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : uint64,
         )
 
     /// <summary>
+    /// Sets the buffer's size without marking it outdated (no transaction). Unlike
+    /// <see cref="Resize"/> this is safe to call while the buffer is already being
+    /// re-evaluated, for example by a subclass from inside its own <c>Compute</c>
+    /// override, where a <c>transact</c> or <c>MarkOutdated</c> would violate the rule
+    /// that nothing marks during adaptive evaluation. The next handle computation (or
+    /// <see cref="Write"/>) picks up the new size and performs the actual GPU
+    /// reallocation, with a copy unless <c>discardOnResize</c> is set. Callers outside
+    /// an active evaluation of this buffer must use <see cref="Resize"/> instead,
+    /// otherwise dependents are never notified.
+    /// </summary>
+    /// <param name="sizeInBytes">The new size in bytes.</param>
+    member x.ResizeInPlace(sizeInBytes : uint64) =
+        lock x (fun _ ->
+            if sizeInBytes <> x.Size then
+                size <- sizeInBytes
+        )
+
+    /// <summary>
     /// Writes data to the buffer.
     /// </summary>
     /// <param name="data">The data to write.</param>

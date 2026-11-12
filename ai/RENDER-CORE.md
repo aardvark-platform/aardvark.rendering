@@ -71,6 +71,8 @@ Describes how buffer elements are accessed.
 
 **BufferUsage flags:** `Index`, `Indirect`, `Vertex`, `Uniform`, `Storage`, `Read`, `Write`, `AccelerationStructure`
 
+**AdaptiveBuffer:** `Resize` marks the buffer outdated in a transaction. `ResizeInPlace` only records the new size, which the next handle computation or write applies, and exists for subclasses that grow the buffer from inside their own `Compute` override, where marking is not allowed.
+
 ### ITexture Types
 
 | Type | Members |
