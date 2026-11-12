@@ -43,6 +43,36 @@ type Runtime(device : Device) as this =
 
     member x.DebugLabelsEnabled = instance.DebugLabelsEnabled
 
+    member x.SupportsMultiDrawIndirectDrawId =
+        // Portability-subset devices (MoltenVK) advertise shaderDrawParameters, but the
+        // SPIR-V to MSL conversion has no equivalent for DrawIndex and fails on it.
+        not (x.Device.PhysicalDevice.HasExtension KHRPortabilitySubset.Name) &&
+        x.Device.EnabledFeatures.GraphicsPipeline.Drawing.MultiDrawIndirect &&
+        x.Device.EnabledFeatures.Shaders.DrawParameters
+
+    member x.SupportsUnboundedSamplerArrays =
+        // Portability-subset devices (MoltenVK) advertise the descriptor indexing features
+        // but cannot compile shaders with non-uniformly indexed unbounded sampler arrays;
+        // pipeline creation fails with VK_ERROR_INVALID_SHADER_NV.
+        not (x.Device.PhysicalDevice.HasExtension KHRPortabilitySubset.Name) &&
+        x.Device.UpdateDescriptorsAfterBind &&
+        x.Device.EnabledFeatures.Descriptors.RuntimeDescriptorArray &&
+        x.Device.EnabledFeatures.Shaders.SampledImageArrayNonUniformIndexing
+
+    // the capacities the descriptor set layouts use: RuntimeConfig.UnboundedArrayCapacity
+    // clamped to the device's per-stage limits
+    member x.MaxUnboundedSamplerArrayElements =
+        if x.SupportsUnboundedSamplerArrays then DescriptorSetLayoutBinding.unboundedSamplerArrayCapacity x.Device else 0
+
+    member x.MaxUnboundedStorageBufferArrayElements =
+        if x.SupportsUnboundedSamplerArrays then DescriptorSetLayoutBinding.unboundedStorageBufferArrayCapacity x.Device else 0
+
+    member x.SupportsShaderFloat64 =
+        x.Device.EnabledFeatures.Shaders.Float64
+
+    member x.MaxStorageBufferBytes : uint64 =
+        uint64 x.Device.PhysicalDevice.Limits.Uniform.MaxStorageViewRange.Bytes
+
     // VK_EXT_fragment_shader_interlock. False on AMD's Windows proprietary
     // driver and most mobile / iGPU drivers; the transparency wrapper falls
     // back to Weighted-Blended OIT when this is false.
@@ -586,6 +616,18 @@ type Runtime(device : Device) as this =
         member x.DebugConfig = x.DebugConfig
 
         member x.DebugLabelsEnabled = x.DebugLabelsEnabled
+
+        member x.SupportsMultiDrawIndirectDrawId = x.SupportsMultiDrawIndirectDrawId
+
+        member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
+
+        member x.SupportsShaderFloat64 = x.SupportsShaderFloat64
+
+        member x.MaxStorageBufferBytes = x.MaxStorageBufferBytes
+
+        member x.MaxUnboundedSamplerArrayElements = x.MaxUnboundedSamplerArrayElements
+
+        member x.MaxUnboundedStorageBufferArrayElements = x.MaxUnboundedStorageBufferArrayElements
 
         member x.FragmentShaderInterlock = x.FragmentShaderInterlock
 

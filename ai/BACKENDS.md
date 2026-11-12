@@ -629,7 +629,7 @@ Configure before creating any runtime:
 | `SuppressSparseBuffers` | false | Disable sparse buffer extensions |
 | `UseNewRenderTask` | false | New render task implementation |
 | `PreferHostSideTextureCompression` | true | CPU-side texture compression |
-| `UnboundedArrayCapacity` (Vulkan) | 4096 | Capacity of an unbounded sampler or storage-buffer array, clamped to the device's per-stage limit; a longer array fails to bind |
+| `UnboundedArrayCapacity` (Vulkan) | 4096 | Capacity of an unbounded sampler or storage-buffer array, clamped to the device's per-stage limit; a longer array fails to bind. The clamped value is reported through `IRuntime.MaxUnbounded*ArrayElements` |
 
 ```fsharp
 // Example: High-performance configuration

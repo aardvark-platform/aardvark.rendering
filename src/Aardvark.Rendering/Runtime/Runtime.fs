@@ -89,6 +89,29 @@ and IRuntime =
     /// Returns whether debug labels and markers are enabled.
     abstract member DebugLabelsEnabled : bool
 
+    /// Returns whether indexed indirect multi-draw is supported and shaders can read the
+    /// zero-based index of the draw command they are executing within such a call, which
+    /// allows them to fetch per-draw data by that index instead of per-draw uniforms.
+    abstract member SupportsMultiDrawIndirectDrawId : bool
+
+    /// Returns whether sampler arrays without a declared size, indexed by non-uniform
+    /// expressions, are supported in shaders.
+    abstract member SupportsUnboundedSamplerArrays : bool
+
+    /// Returns whether shaders can use 64-bit floating point types.
+    abstract member SupportsShaderFloat64 : bool
+
+    /// Returns the maximum number of bytes a single storage buffer binding can address in a shader.
+    abstract member MaxStorageBufferBytes : uint64
+
+    /// Returns the number of elements one unbounded sampler array binding (see
+    /// SupportsUnboundedSamplerArrays) can hold, or 0 when such arrays are not supported.
+    abstract member MaxUnboundedSamplerArrayElements : int
+
+    /// Returns the number of elements one unbounded storage-buffer array binding can
+    /// hold, or 0 when such arrays are not supported.
+    abstract member MaxUnboundedStorageBufferArrayElements : int
+
     /// Returns whether fragment-shader pixel interlock is supported (per-pixel
     /// critical sections in the fragment shader: VK_EXT_fragment_shader_interlock
     /// on Vulkan, GL_ARB_fragment_shader_interlock on desktop GL). The exact

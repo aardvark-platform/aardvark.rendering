@@ -37,6 +37,25 @@ type Runtime(debug : IDebugConfig) =
 
     member x.DebugLabelsEnabled = debug.DebugLabels
 
+    // Multi-draw indirect is core since GL 4.3 and gl_DrawID since GLSL 4.6; both are
+    // also available as extensions. Unbounded sampler arrays would need
+    // ARB_bindless_texture or NV_gpu_shader5 and are not supported.
+    member x.SupportsMultiDrawIndirectDrawId =
+        (ctx.Driver.version >= Version(4, 3, 0) || ctx.HasExtension "GL_ARB_multi_draw_indirect") &&
+        (ctx.Driver.glsl >= Version(4, 6, 0) || ctx.HasExtension "GL_ARB_shader_draw_parameters")
+
+    member x.SupportsUnboundedSamplerArrays = false
+
+    member x.MaxUnboundedSamplerArrayElements = 0
+
+    member x.MaxUnboundedStorageBufferArrayElements = 0
+
+    // double, dvec and dmat are core since GLSL 4.00 and available as an extension before.
+    member x.SupportsShaderFloat64 =
+        ctx.Driver.glsl >= Version(4, 0, 0) || ctx.HasExtension "GL_ARB_gpu_shader_fp64"
+
+    member x.MaxStorageBufferBytes : uint64 = ctx.MaxShaderStorageBlockSize
+
     // GL_ARB_fragment_shader_interlock; absent on most mobile drivers and on
     // AMD's Windows proprietary stack. The transparency wrapper picks
     // Weighted-Blended over A-buffer when this is false.
@@ -106,6 +125,12 @@ type Runtime(debug : IDebugConfig) =
         member x.SupportsLayeredShaderInputs = x.SupportsLayeredShaderInputs
         member x.DebugConfig = x.DebugConfig
         member x.DebugLabelsEnabled = x.DebugLabelsEnabled
+        member x.SupportsMultiDrawIndirectDrawId = x.SupportsMultiDrawIndirectDrawId
+        member x.SupportsUnboundedSamplerArrays = x.SupportsUnboundedSamplerArrays
+        member x.SupportsShaderFloat64 = x.SupportsShaderFloat64
+        member x.MaxStorageBufferBytes = x.MaxStorageBufferBytes
+        member x.MaxUnboundedSamplerArrayElements = x.MaxUnboundedSamplerArrayElements
+        member x.MaxUnboundedStorageBufferArrayElements = x.MaxUnboundedStorageBufferArrayElements
         member x.FragmentShaderInterlock = x.FragmentShaderInterlock
         member x.ContextLock = x.ContextLock
 

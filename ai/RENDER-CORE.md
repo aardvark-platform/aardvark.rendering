@@ -28,6 +28,8 @@ CreateFramebufferSignature(colorAttachments, depthAttachment, samples, layers) -
 CreateFramebuffer(signature, attachments) -> IFramebuffer
 ```
 
+**Capability queries:** `SupportsMultiDrawIndirectDrawId` (indexed indirect multi-draw with the draw index readable in the shader), `SupportsUnboundedSamplerArrays` with `MaxUnboundedSamplerArrayElements` and `MaxUnboundedStorageBufferArrayElements` (the per-binding capacities, 0 when unsupported), `SupportsShaderFloat64` and `MaxStorageBufferBytes`. GL answers from the GLSL version and the limits, Vulkan from the enabled features and limits; portability-subset devices (MoltenVK) report multi-draw ids and unbounded arrays as unavailable.
+
 ### Backend Implementations
 
 ```fsharp

@@ -249,6 +249,8 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
 
     let mutable maxFramebufferSamples : Option<int> = None
 
+    let mutable maxShaderStorageBlockSize : Option<uint64> = None
+
     let mutable shaderCachePath : Option<string> = Some defaultShaderCachePath
 
     let formatSampleCounts = FastConcurrentDict()
@@ -430,6 +432,14 @@ type Context(runtime : IRuntime, createContext : ContextHandle option -> Context
             else
                 Log.warn "[GL] Cannot query GL_MAX_FRAMEBUFFER_SAMPLES"
                 64
+        )
+
+    member x.MaxShaderStorageBlockSize =
+        getOrQuery "max shader storage block size" &maxShaderStorageBlockSize (fun _ ->
+            if x.Driver.version >= Version(4, 3, 0) || x.HasExtension "GL_ARB_shader_storage_buffer_object" then
+                uint64 (GL.GetInteger64(enum<GetPName> (int All.MaxShaderStorageBlockSize)))
+            else
+                0UL
         )
 
     member x.DebugLabelsEnabled = debugLabelsEnabled
