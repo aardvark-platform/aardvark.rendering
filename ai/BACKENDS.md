@@ -271,6 +271,8 @@ Vulkan caches `VkPipeline` objects (expensive to create):
 // VKVM + VkPipelineCache persist between frames
 ```
 
+**Specialization constants** (`uniform?SpecializationConstant?Name`, see SG-PATTERNS.md) are part of the pipeline identity. A specialized pipeline is compiled on a background thread (`BackgroundSpecialization` in `src/Aardvark.Rendering.Vulkan/Management/ResourceManager.fs`); meanwhile the render object uses the unspecialized pipeline of the same state, which runs the shader with the constants' defaults. The compile works on a private snapshot of the create-infos, is tagged with the input versions, and its result is adopted only while those versions are still current; a failed compile keeps the fallback until an input changes.
+
 ### Debug Configuration
 
 ```fsharp
@@ -663,6 +665,7 @@ RuntimeConfig.SuppressSparseBuffers <- true
 | 11 | Dual Runtime Disposal | Dispose unused runtime immediately to free GPU memory |
 | 12 | RuntimeConfig Timing | Set before creating runtime; frozen after constructor |
 | 13 | Reversed Depth | Use `DepthTest.Greater` not `Less` when reversed depth enabled |
+| 14 | Specialization Constants (Vulkan) | Compiled asynchronously; the first frames use the shader defaults, and each distinct value set is a full pipeline compile |
 
 ---
 

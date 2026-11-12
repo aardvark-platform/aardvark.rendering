@@ -85,6 +85,20 @@ type ResourceManagerExtensions private() =
         let multisampleState =
             this.CreateMultisampleState(renderPass, state.RasterizerState.Multisample, program)
 
+        let specialization, fallback =
+            match this.CreateSpecialization(layout.SpecializationConstants, state.GlobalUniforms) with
+            | Some specialization ->
+                let fallback =
+                    this.CreatePipeline(
+                        program, renderPass, inputState, inputAssembly,
+                        rasterizerState, colorBlendState, depthStencilState,
+                        multisampleState, None, None
+                    )
+
+                Some specialization, Some fallback
+            | None ->
+                None, None
+
         let pipeline =
             this.CreatePipeline(
                 program,
@@ -94,7 +108,9 @@ type ResourceManagerExtensions private() =
                 rasterizerState,
                 colorBlendState,
                 depthStencilState,
-                multisampleState
+                multisampleState,
+                specialization,
+                fallback
             )
         {
             ppPipeline  = pipeline

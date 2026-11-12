@@ -33,6 +33,7 @@ Index for AI coding assistants. Read only the doc you need.
 - Custom applicators -> SG-SEMANTICS.md
 - `DefaultSemantic`, usage examples -> SG-PATTERNS.md
 - Storage buffers, conditional features -> SG-PATTERNS.md
+- Specialization constants (`uniform?SpecializationConstant?Name`) -> SG-PATTERNS.md
 
 ### Rendering Core
 - `IRuntime`, `IBackendSurface`, `IRenderTask` -> RENDER-CORE.md
@@ -47,6 +48,7 @@ Index for AI coding assistants. Read only the doc you need.
 - `Aardvark.Rendering.GL.Runtime` -> BACKENDS.md
 - `Aardvark.Rendering.Vulkan.Runtime` -> BACKENDS.md
 - Context management, resource caching -> BACKENDS.md
+- Background pipeline specialization (Vulkan) -> BACKENDS.md
 - Debug configuration, shader printing -> DEBUG.md
 - `DebugLevel`, `DebugConfig`, validation layers -> DEBUG.md
 - `PrintShaderCode`, `Debug.Printfn()`, RenderDoc, Nsight -> DEBUG.md

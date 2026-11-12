@@ -1286,6 +1286,57 @@ module Resources =
 
             true
 
+    /// A specialization constant with the uniform that supplies its value and the
+    /// writer that stores it at its offset in the specialization data.
+    type SpecializationConstantEntry =
+        {
+            Constant : FShade.GLSL.GLSLSpecializationConstant
+            Value    : IAdaptiveValue
+            Writer   : UniformWriters.IWriter
+            Offset   : int
+            Size     : int
+        }
+
+    /// VkSpecializationInfo for a pipeline. The values come from the uniform
+    /// provider under the names of the FShade `SpecializationConstant` members,
+    /// like push constants; constants the provider does not supply keep the
+    /// defaults of the shader. Entries and data are unmanaged memory freed in
+    /// Destroy, since the create-info must stay valid while
+    /// vkCreateGraphicsPipelines reads it.
+    type SpecializationResource(owner : IResourceCache, key : list<obj>,
+                                constants : SpecializationConstantEntry[], dataSize : int) =
+        inherit AbstractPointerResource<VkSpecializationInfo>(owner, key)
+
+        let mutable pEntries = NativePtr.zero<VkSpecializationMapEntry>
+        let mutable pData = NativePtr.zero<byte>
+
+        override x.Create() =
+            base.Create()
+            pEntries <- NativePtr.alloc constants.Length
+            pData <- NativePtr.alloc dataSize
+
+            for i = 0 to constants.Length - 1 do
+                let c = constants.[i]
+                NativePtr.set pEntries i (VkSpecializationMapEntry(uint32 c.Constant.specId, uint32 c.Offset, uint64 c.Size))
+
+        override x.Destroy() =
+            if pData <> NativePtr.zero then
+                NativePtr.free pEntries
+                NativePtr.free pData
+                pEntries <- NativePtr.zero
+                pData <- NativePtr.zero
+
+            base.Destroy()
+
+        override x.Update(handle : VkSpecializationInfo byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            let data = NativePtr.toNativeInt pData
+
+            for c in constants do
+                c.Writer.Write(token, c.Value, data)
+
+            handle <- VkSpecializationInfo(uint32 constants.Length, pEntries, uint64 dataSize, data)
+            true
+
     // Sample shading is taken from the linked ShaderProgram's `SampleShading`
     // flag, which `ShaderProgram.fragmentInfo` derives from the per-sample
     // builtins the fragment shader reads. Multisampled pipelines whose shader
@@ -1506,6 +1557,282 @@ module Resources =
             | _ -> ()
 
 
+    /// The versions of the resources a pipeline is built from. A background
+    /// compile is launched for one such set, and its pipeline is adopted only
+    /// while that set is still the current one.
+    [<Struct>]
+    type private PipelineInputVersions =
+        {
+            Program        : int
+            Specialization : int
+            VertexInput    : int
+            InputAssembly  : int
+            Rasterizer     : int
+            ColorBlend     : int
+            DepthStencil   : int
+            Multisample    : int
+        }
+
+    /// Private copies of everything a background pipeline compile reads. The
+    /// state resources are shared between pipelines and free or rewrite their
+    /// native arrays on update, and a swapped shader program disposes its modules,
+    /// so a compile must not read them after launch: the snapshot owns copies of
+    /// the create-infos and a reference to the program, released when the compile
+    /// is done.
+    [<NoEquality; NoComparison>]
+    type private PipelineSnapshot =
+        {
+            Program       : ShaderProgram
+            RenderPass    : VkRenderPass
+            ViewportCount : uint32
+            Stages        : VkPipelineShaderStageCreateInfo[]
+            VertexInput   : nativeptr<VkPipelineVertexInputStateCreateInfo>
+            InputAssembly : nativeptr<VkPipelineInputAssemblyStateCreateInfo>
+            Rasterizer    : nativeptr<VkPipelineRasterizationStateCreateInfo>
+            ColorBlend    : nativeptr<VkPipelineColorBlendStateCreateInfo>
+            DepthStencil  : nativeptr<VkPipelineDepthStencilStateCreateInfo>
+            Multisample   : nativeptr<VkPipelineMultisampleStateCreateInfo>
+            Frees         : List<unit -> unit>
+        }
+
+        member x.Layout = x.Program.PipelineLayout.Handle
+        member x.HasTessellation = x.Program.HasTessellation
+        member x.PatchSize = x.Program.TessellationPatchSize
+
+        interface IDisposable with
+            member x.Dispose() =
+                for free in x.Frees do free()
+                x.Frees.Clear()
+                x.Program.Dispose()
+
+    module private PipelineSnapshot =
+
+        let private copyArray<'T when 'T : unmanaged> (src : nativeptr<'T>) (count : int) (frees : List<unit -> unit>) : nativeptr<'T> =
+            if count <= 0 || NativePtr.isNull src then
+                NativePtr.zero
+            else
+                let dst = NativePtr.alloc count
+                let bytes = uint64 (count * sizeof<'T>)
+                Buffer.MemoryCopy(NativePtr.toNativeInt src, NativePtr.toNativeInt dst, bytes, bytes)
+                frees.Add(fun () -> NativePtr.free dst)
+                dst
+
+        let private copyStruct<'T when 'T : unmanaged> (value : 'T) (frees : List<unit -> unit>) : nativeptr<'T> =
+            let dst = NativePtr.alloc 1
+            NativePtr.write dst value
+            frees.Add(fun () -> NativePtr.free dst)
+            dst
+
+        /// Copies the create-infos the given pointers refer to (including the arrays
+        /// and pNext structs they point to) and takes a reference to the program.
+        let create (program : ShaderProgram) (renderPass : VkRenderPass) (viewportCount : uint32)
+                   (specialization : nativeptr<VkSpecializationInfo>)
+                   (vertexInput : nativeptr<VkPipelineVertexInputStateCreateInfo>)
+                   (inputAssembly : nativeptr<VkPipelineInputAssemblyStateCreateInfo>)
+                   (rasterizer : nativeptr<VkPipelineRasterizationStateCreateInfo>)
+                   (colorBlend : nativeptr<VkPipelineColorBlendStateCreateInfo>)
+                   (depthStencil : nativeptr<VkPipelineDepthStencilStateCreateInfo>)
+                   (multisample : nativeptr<VkPipelineMultisampleStateCreateInfo>) =
+            let frees = List<unit -> unit>()
+            program.AddReference()
+
+            let spec =
+                if NativePtr.isNull specialization then
+                    NativePtr.zero
+                else
+                    let info = NativePtr.read specialization
+                    let entries = copyArray info.pMapEntries (int info.mapEntryCount) frees
+                    let data = copyArray (NativePtr.ofNativeInt<byte> info.pData) (int info.dataSize) frees
+                    copyStruct (VkSpecializationInfo(info.mapEntryCount, entries, info.dataSize, NativePtr.toNativeInt data)) frees
+
+            let stages =
+                program.ShaderCreateInfos |> Array.map (fun stage ->
+                    let mutable s = stage
+                    s.pSpecializationInfo <- spec
+                    s
+                )
+
+            let vertexInput =
+                let mutable s = NativePtr.read vertexInput
+                s.pVertexBindingDescriptions <- copyArray s.pVertexBindingDescriptions (int s.vertexBindingDescriptionCount) frees
+                s.pVertexAttributeDescriptions <- copyArray s.pVertexAttributeDescriptions (int s.vertexAttributeDescriptionCount) frees
+                copyStruct s frees
+
+            let inputAssembly = copyStruct (NativePtr.read inputAssembly) frees
+
+            let rasterizer =
+                let mutable s = NativePtr.read rasterizer
+                // the only pNext the rasterizer resource attaches is the conservative raster info
+                if s.pNext <> 0n then
+                    let conservative = NativePtr.read (NativePtr.ofNativeInt<VkPipelineRasterizationConservativeStateCreateInfoEXT> s.pNext)
+                    s.pNext <- NativePtr.toNativeInt (copyStruct conservative frees)
+                copyStruct s frees
+
+            let colorBlend =
+                let mutable s = NativePtr.read colorBlend
+                s.pAttachments <- copyArray s.pAttachments (int s.attachmentCount) frees
+                copyStruct s frees
+
+            let depthStencil = copyStruct (NativePtr.read depthStencil) frees
+
+            let multisample =
+                let mutable s = NativePtr.read multisample
+                if not (NativePtr.isNull s.pSampleMask) then
+                    s.pSampleMask <- copyArray s.pSampleMask ((int s.rasterizationSamples + 31) / 32) frees
+                copyStruct s frees
+
+            {
+                Program       = program
+                RenderPass    = renderPass
+                ViewportCount = viewportCount
+                Stages        = stages
+                VertexInput   = vertexInput
+                InputAssembly = inputAssembly
+                Rasterizer    = rasterizer
+                ColorBlend    = colorBlend
+                DepthStencil  = depthStencil
+                Multisample   = multisample
+                Frees         = frees
+            }
+
+        /// Creates the pipeline described by the snapshot.
+        let compile (device : Device) (snapshot : PipelineSnapshot) : struct (VkResult * VkPipeline) =
+            let stages = snapshot.Stages
+            use pStages = fixed stages
+            let viewportCount = snapshot.ViewportCount
+            let mutable viewport = VkPipelineViewportStateCreateInfo(VkPipelineViewportStateCreateFlags.None, viewportCount, NativePtr.zero, viewportCount, NativePtr.zero)
+            let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
+            use pDynamicStates = fixed dynamicStates
+            let mutable dynamic = VkPipelineDynamicStateCreateInfo(VkPipelineDynamicStateCreateFlags.None, uint32 dynamicStates.Length, pDynamicStates)
+            let mutable tessellation = VkPipelineTessellationStateCreateInfo(VkPipelineTessellationStateCreateFlags.None, uint32 snapshot.PatchSize)
+            use pTessellation = fixed &tessellation
+            use pViewport = fixed &viewport
+            use pDynamic = fixed &dynamic
+
+            let mutable result = VkPipeline.Null
+            let mutable info =
+                VkGraphicsPipelineCreateInfo(
+                    VkPipelineCreateFlags.AllowDerivativesBit,
+                    uint32 stages.Length, pStages,
+                    snapshot.VertexInput, snapshot.InputAssembly,
+                    (if snapshot.HasTessellation then pTessellation else NativePtr.zero), pViewport,
+                    snapshot.Rasterizer, snapshot.Multisample, snapshot.DepthStencil, snapshot.ColorBlend,
+                    pDynamic, snapshot.Layout, snapshot.RenderPass, 0u, VkPipeline.Null, -1
+                )
+
+            use pInfo = fixed &info
+            use pResult = fixed &result
+            let ret = VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, pInfo, NativePtr.zero, pResult)
+            struct (ret, result)
+
+    /// State of a background specialization.
+    type private SpecializationState =
+        | Idle      = 0
+        | Compiling = 1
+        | Compiled  = 2
+
+    /// Compiles the specialized variant of a pipeline on a background thread while
+    /// the owning resource publishes its unspecialized fallback. A compile is
+    /// launched for a snapshot of the inputs and tagged with their versions: its
+    /// pipeline is handed out only while those versions are still current, a stale
+    /// one is discarded and recompiled, and a failed one keeps the fallback until
+    /// the inputs change. `markOutdated` is invoked from a detached task when a
+    /// compile ends, so the owner adopts or relaunches on its next update.
+    type private BackgroundSpecialization(device : Device, markOutdated : unit -> unit) =
+        let mutable state = SpecializationState.Idle
+        let mutable compiled = VkPipeline.Null
+        let mutable launched = Unchecked.defaultof<PipelineInputVersions>   // inputs of the in-flight or compiled pipeline
+        let mutable current = Unchecked.defaultof<PipelineInputVersions>    // inputs seen by the owner's latest update
+        let mutable failed : PipelineInputVersions voption = ValueNone      // inputs whose compile failed
+        let mutable cancelled = false
+        let mutable task : System.Threading.Tasks.Task = null
+        let lockObj = obj()
+
+        /// Records the inputs of the owner's latest update and returns the compiled
+        /// pipeline if it was built for exactly these inputs. A pipeline built for
+        /// other inputs is destroyed, and a compile in flight for other inputs is
+        /// discarded when it ends.
+        member _.TryAdopt(versions : PipelineInputVersions) : VkPipeline voption =
+            lock lockObj (fun () ->
+                current <- versions
+                if state = SpecializationState.Compiled then
+                    let h = compiled
+                    compiled <- VkPipeline.Null
+                    state <- SpecializationState.Idle
+                    if launched = versions then
+                        ValueSome h
+                    else
+                        VkRaw.vkDestroyPipeline(device.Handle, h, NativePtr.zero)
+                        ValueNone
+                else
+                    ValueNone
+            )
+
+        /// Starts a compile for the given inputs unless a compile is in flight or
+        /// these inputs failed before. The snapshot is only taken when a compile
+        /// actually starts.
+        member _.Launch(versions : PipelineInputVersions, snapshot : unit -> PipelineSnapshot) =
+            lock lockObj (fun () ->
+                if state = SpecializationState.Idle && failed <> ValueSome versions then
+                    state <- SpecializationState.Compiling
+                    launched <- versions
+                    let snapshot = snapshot()
+
+                    // stored under the lock so that Dispose() always sees the task it must wait for
+                    task <- System.Threading.Tasks.Task.Run(fun () ->
+                        let struct (ret, result) =
+                            try PipelineSnapshot.compile device snapshot
+                            finally (snapshot :> IDisposable).Dispose()
+
+                        let struct (keep, report) =
+                            lock lockObj (fun () ->
+                                if cancelled || current <> versions then
+                                    // the inputs moved: discard, the mark below relaunches for the current ones
+                                    state <- SpecializationState.Idle
+                                    struct (false, false)
+                                elif ret <> VkResult.Success then
+                                    failed <- ValueSome versions
+                                    state <- SpecializationState.Idle
+                                    struct (false, true)
+                                else
+                                    compiled <- result
+                                    state <- SpecializationState.Compiled
+                                    struct (true, false)
+                            )
+
+                        if not keep && result.IsValid then
+                            VkRaw.vkDestroyPipeline(device.Handle, result, NativePtr.zero)
+
+                        if report then
+                            Log.warn "[Vulkan] background pipeline specialization failed (%A): keeping the unspecialized pipeline" ret
+
+                        // Detached mark: Dispose() waits for this task while itself running
+                        // inside a transaction (resource Release paths transact); a transact
+                        // here would block on that open transaction. Marking a since-disposed
+                        // owner is harmless.
+                        if not cancelled then
+                            System.Threading.Tasks.Task.Run(fun () -> markOutdated()) |> ignore
+                    )
+            )
+
+        /// No result is adopted after this. Waits for a compile in flight so that it
+        /// cannot outlive the device, and destroys a compiled pipeline nobody adopted.
+        member _.Dispose() =
+            let t = lock lockObj (fun () -> cancelled <- true; task)
+
+            if not (isNull t) then
+                try t.Wait() with _ -> ()
+
+            lock lockObj (fun () ->
+                if compiled.IsValid then
+                    VkRaw.vkDestroyPipeline(device.Handle, compiled, NativePtr.zero)
+                    compiled <- VkPipeline.Null
+                state <- SpecializationState.Idle
+            )
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
     type PipelineResource(owner : IResourceCache, key : list<obj>,
                           renderPass : RenderPass,
                           program : IResourceLocation<ShaderProgram>,
@@ -1514,10 +1841,34 @@ module Resources =
                           rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
                           colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
                           depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
-                          multisample : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
+                          multisample : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>,
+                          specialization : INativeResourceLocation<VkSpecializationInfo> option,
+                          fallback : INativeResourceLocation<VkPipeline> option) as this =
         inherit AbstractPointerResource<VkPipeline>(owner, key)
 
         let device = renderPass.Device
+
+        // Asynchronous specialization (only when a fallback pipeline is supplied): the
+        // specialized pipeline compiles in the background while this resource
+        // publishes the fallback's unspecialized handle. The fallback runs the
+        // shader with the default values of its specialization constants, so the
+        // frames until adoption are only correct when the defaults are: the heap's
+        // constants default to "decode the type id at runtime", which produces the
+        // same pixels as the folded decoder; a constant that changes the result
+        // renders the default for those frames (the SpecializationConstants test
+        // polls the output for that reason). This trade (no compile stall on the
+        // render thread, momentarily unspecialized frames) is deliberate.
+        // `ownsHandle` guards Free: a borrowed fallback handle must never be
+        // destroyed here.
+        let background = new BackgroundSpecialization(device, fun () -> transact (fun () -> this.MarkOutdated()))
+        let mutable ownsHandle = true
+
+        let viewportCount =
+            if device.IsDeviceGroup then
+                if renderPass.LayerCount > 1 then 1u
+                else uint32 device.PhysicalDevices.Length
+            else
+                1u
 
         override x.Create() =
             base.Create()
@@ -1528,9 +1879,12 @@ module Resources =
             colorBlendState.Acquire()
             depthStencil.Acquire()
             multisample.Acquire()
+            specialization |> Option.iter _.Acquire()
+            fallback |> Option.iter _.Acquire()
 
         override x.Destroy() =
             base.Destroy()
+            background.Dispose()
             program.Release()
             inputState.Release()
             inputAssembly.Release()
@@ -1538,24 +1892,43 @@ module Resources =
             colorBlendState.Release()
             depthStencil.Release()
             multisample.Release()
+            specialization |> Option.iter _.Release()
+            fallback |> Option.iter _.Release()
 
         override x.Update(handle : VkPipeline byref, user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
-            let prog = program.Update(user, token, renderToken).handle
+            let programInfo = program.Update(user, token, renderToken)
+            let prog = programInfo.handle
 
-            use pShaderCreateInfos = fixed prog.ShaderCreateInfos
+            // Specialization: the ShaderProgram's stage array is shared across
+            // pipelines and must keep its null pSpecializationInfo, so build a
+            // per-pipeline copy pointing at this pipeline's VkSpecializationInfo.
+            // An empty value set degrades to the shared array (byte-identical
+            // to the unspecialized path).
+            let specializationVersion, pSpec =
+                match specialization with
+                | Some s ->
+                    let info = s.Update(user, token, renderToken)
+                    let value : VkSpecializationInfo = NativePtr.read s.Pointer
+                    info.version, (if value.mapEntryCount = 0u then NativePtr.zero else s.Pointer)
+                | None ->
+                    0, NativePtr.zero
+
+            let stageInfos =
+                if NativePtr.isNull pSpec then
+                    prog.ShaderCreateInfos
+                else
+                    let arr = Array.copy prog.ShaderCreateInfos
+                    for i in 0 .. arr.Length - 1 do
+                        arr.[i].pSpecializationInfo <- pSpec
+                    arr
+
+            use pShaderCreateInfos = fixed stageInfos
 
             let mutable viewportState =
-                let vp  =
-                    if device.IsDeviceGroup then
-                        if renderPass.LayerCount > 1 then 1u
-                        else uint32 device.PhysicalDevices.Length
-                    else
-                        1u
-
                 VkPipelineViewportStateCreateInfo(
                     VkPipelineViewportStateCreateFlags.None,
-                    uint32 vp, NativePtr.zero,
-                    uint32 vp, NativePtr.zero
+                    viewportCount, NativePtr.zero,
+                    viewportCount, NativePtr.zero
                 )
 
             let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
@@ -1581,56 +1954,102 @@ module Resources =
 
             // TODO: tessellation input-patch-size
 
-            let inputState = inputState.Update(user, token, renderToken) |> ignore; inputState.Pointer
-            let inputAssembly = inputAssembly.Update(user, token, renderToken) |> ignore; inputAssembly.Pointer
-            let rasterizerState = rasterizerState.Update(user, token, renderToken) |> ignore; rasterizerState.Pointer
-            let depthStencil = depthStencil.Update(user, token, renderToken) |> ignore; depthStencil.Pointer
-            let colorBlendState = colorBlendState.Update(user, token, renderToken) |> ignore; colorBlendState.Pointer
-            let multisample = multisample.Update(user, token, renderToken) |> ignore; multisample.Pointer
+            let vertexInputInfo = inputState.Update(user, token, renderToken)
+            let inputAssemblyInfo = inputAssembly.Update(user, token, renderToken)
+            let rasterizerInfo = rasterizerState.Update(user, token, renderToken)
+            let depthStencilInfo = depthStencil.Update(user, token, renderToken)
+            let colorBlendInfo = colorBlendState.Update(user, token, renderToken)
+            let multisampleInfo = multisample.Update(user, token, renderToken)
 
-            let basePipeline, derivativeFlag =
-                if not x.HasHandle then
-                    VkPipeline.Null, VkPipelineCreateFlags.None
-                else
-                    handle, VkPipelineCreateFlags.DerivativeBit
+            let inputState = inputState.Pointer
+            let inputAssembly = inputAssembly.Pointer
+            let rasterizerState = rasterizerState.Pointer
+            let depthStencil = depthStencil.Pointer
+            let colorBlendState = colorBlendState.Pointer
+            let multisample = multisample.Pointer
 
-            let mutable result = VkPipeline.Null
-            use pViewportState = fixed &viewportState
-            use pDynamicStateCreateInfo = fixed &dynamicStateCreateInfo
-            let mutable createInfo =
-                VkGraphicsPipelineCreateInfo(
-                    VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
-                    uint32 prog.ShaderCreateInfos.Length,
-                    pShaderCreateInfos,
-                    inputState,
-                    inputAssembly,
-                    pTessState,
-                    pViewportState,
-                    rasterizerState,
-                    multisample,
-                    depthStencil,
-                    colorBlendState,
-                    pDynamicStateCreateInfo, //dynamic
-                    prog.PipelineLayout.Handle,
-                    renderPass.Handle,
-                    0u,
-                    basePipeline,
-                    -1
-                )
+            // Asynchronous specialization: with a fallback and non-empty specialization
+            // values, the specialized pipeline is compiled by `background`; this resource
+            // adopts it once it is built for the current inputs and publishes the
+            // fallback's unspecialized handle meanwhile.
+            if fallback.IsSome && not (NativePtr.isNull pSpec) then
+                let versions =
+                    {
+                        Program        = programInfo.version
+                        Specialization = specializationVersion
+                        VertexInput    = vertexInputInfo.version
+                        InputAssembly  = inputAssemblyInfo.version
+                        Rasterizer     = rasterizerInfo.version
+                        ColorBlend     = colorBlendInfo.version
+                        DepthStencil   = depthStencilInfo.version
+                        Multisample    = multisampleInfo.version
+                    }
 
-            use pCreateInfo = fixed &createInfo
-            use pResult = fixed &result
-            VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, pCreateInfo, NativePtr.zero, pResult)
-                |> check "could not create pipeline"
+                match background.TryAdopt versions with
+                | ValueSome specialized ->
+                    if x.HasHandle then x.Free &handle
+                    handle <- specialized
+                    ownsHandle <- true
+                    true
 
-            if x.HasHandle then
-                x.Free &handle
+                | ValueNone ->
+                    background.Launch(versions, fun () ->
+                        PipelineSnapshot.create prog renderPass.Handle viewportCount pSpec
+                                                inputState inputAssembly rasterizerState colorBlendState depthStencil multisample
+                    )
 
-            handle <- result
-            true
+                    // publish the fallback's (unspecialized) pipeline meanwhile
+                    let f = fallback.Value
+                    f.Update(user, token, renderToken) |> ignore
+                    if x.HasHandle then x.Free &handle
+                    handle <- NativePtr.read f.Pointer
+                    ownsHandle <- false
+                    true
+            else
+                let basePipeline, derivativeFlag =
+                    if not x.HasHandle then
+                        VkPipeline.Null, VkPipelineCreateFlags.None
+                    else
+                        handle, VkPipelineCreateFlags.DerivativeBit
 
+                let mutable result = VkPipeline.Null
+                use pViewportState = fixed &viewportState
+                use pDynamicStateCreateInfo = fixed &dynamicStateCreateInfo
+                let mutable createInfo =
+                    VkGraphicsPipelineCreateInfo(
+                        VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
+                        uint32 stageInfos.Length,
+                        pShaderCreateInfos,
+                        inputState,
+                        inputAssembly,
+                        pTessState,
+                        pViewportState,
+                        rasterizerState,
+                        multisample,
+                        depthStencil,
+                        colorBlendState,
+                        pDynamicStateCreateInfo, //dynamic
+                        prog.PipelineLayout.Handle,
+                        renderPass.Handle,
+                        0u,
+                        basePipeline,
+                        -1
+                    )
+
+                use pCreateInfo = fixed &createInfo
+                use pResult = fixed &result
+                VkRaw.vkCreateGraphicsPipelines(device.Handle, device.PipelineCache.Handle, 1u, pCreateInfo, NativePtr.zero, pResult)
+                    |> check "could not create pipeline"
+
+                if x.HasHandle then x.Free &handle
+                ownsHandle <- true
+                handle <- result
+                true
+
+        /// Destroys the pipeline unless it is the borrowed fallback.
         override x.Free(handle : VkPipeline inref) =
-            VkRaw.vkDestroyPipeline(renderPass.Device.Handle, handle, NativePtr.zero)
+            if ownsHandle then
+                VkRaw.vkDestroyPipeline(renderPass.Device.Handle, handle, NativePtr.zero)
 
     type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, buffer : IResourceLocation<IndirectBuffer>) =
         inherit AbstractPointerResource<DrawCall>(owner, key)
@@ -2059,6 +2478,7 @@ type ResourceManager(device : Device) =
     let viewportCache           = NativeResourceLocationCache<VkViewport>(device)
     let scissorCache            = NativeResourceLocationCache<VkRect2D>(device)
     let pipelineCache           = NativeResourceLocationCache<VkPipeline>(device)
+    let specializationCache     = NativeResourceLocationCache<VkSpecializationInfo>(device)
 
     let drawCallCache           = NativeResourceLocationCache<DrawCall>(device)
     let bufferBindingCache      = NativeResourceLocationCache<VertexBufferBinding>(device)
@@ -2100,6 +2520,7 @@ type ResourceManager(device : Device) =
         depthStencilCache.Clear()
         rasterizerStateCache.Clear()
         colorBlendStateCache.Clear()
+        specializationCache.Clear()
         multisampleCache.Clear()
         viewportCache.Clear()
         scissorCache.Clear()
@@ -2487,6 +2908,51 @@ type ResourceManager(device : Device) =
             fun cache key -> ScissorResource(cache, key, scissor)
         )
 
+    /// The specialization of a pipeline from the uniform provider, or None when the
+    /// provider supplies none of the program's specialization constants.
+    member x.CreateSpecialization(constants : MapExt<string, FShade.GLSL.GLSLSpecializationConstant>, uniforms : IUniformProvider) =
+        let values =
+            constants |> MapExt.toList |> List.choose (fun (name, constant) ->
+                let value =
+                    match Uniforms.tryGetDerivedUniform name uniforms with
+                    | ValueSome v -> ValueSome v
+                    | ValueNone -> uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create name)
+
+                match value with
+                | ValueSome value when not (Object.ReferenceEquals(value, null)) -> Some struct (constant, value)
+                | _ -> None
+            )
+
+        if values.IsEmpty then
+            None
+        else
+            let key = (values |> List.map (fun struct (c, _) -> c :> obj)) @ (values |> List.map (fun struct (_, v) -> v :> obj))
+
+            specializationCache.GetOrCreate(key, fun cache key ->
+                // 8-byte constants first, so every offset is naturally aligned
+                let mutable offset = 0
+
+                let entries =
+                    values
+                    |> List.sortBy (fun struct (c, _) -> -(GLSLType.sizeof c.specType), c.specId)
+                    |> List.map (fun struct (constant, value) ->
+                        let size = GLSLType.sizeof constant.specType
+
+                        let writer =
+                            match UniformWriters.tryGetWriter offset constant.specType value.ContentType with
+                            | Result.Ok writer -> writer
+                            | Result.Error msg -> failf $"cannot get writer for specialization constant '{constant.specName}': {msg}"
+
+                        let entry = { Constant = constant; Value = value; Writer = writer; Offset = offset; Size = size }
+                        offset <- offset + size
+                        entry
+                    )
+                    |> List.toArray
+
+                SpecializationResource(cache, key, entries, offset)
+            )
+            |> Some
+
     member x.CreatePipeline(program         : IResourceLocation<ShaderProgram>,
                             pass            : RenderPass,
                             inputState      : INativeResourceLocation<VkPipelineVertexInputStateCreateInfo>,
@@ -2494,10 +2960,23 @@ type ResourceManager(device : Device) =
                             rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
                             colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
                             depthStencil    : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
-                            multisample     : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
+                            multisample     : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>,
+                            specialization  : INativeResourceLocation<VkSpecializationInfo> option,
+                            // unspecialized pipeline published while the specialized one
+                            // compiles in the background (deterministic from the other
+                            // inputs, not part of the cache key). It renders the shader's
+                            // default constant values until the specialized one is adopted.
+                            fallback        : INativeResourceLocation<VkPipeline> option) =
+
+        // the specialization is part of the pipeline identity: two draws whose
+        // constants differ must never share a VkPipeline. An unspecialized pipeline
+        // keeps the key it had before.
+        let key =
+            [ program :> obj; pass :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; depthStencil :> obj; multisample :> obj ]
+            @ (match specialization with Some s -> [ s :> obj ] | None -> [])
 
         pipelineCache.GetOrCreate(
-            [ program :> obj; pass :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; depthStencil :> obj; multisample :> obj ],
+            key,
             fun cache key ->
                 PipelineResource(
                     cache, key,
@@ -2508,7 +2987,9 @@ type ResourceManager(device : Device) =
                     rasterizerState,
                     colorBlendState,
                     depthStencil,
-                    multisample
+                    multisample,
+                    specialization,
+                    fallback
                 )
 
         )

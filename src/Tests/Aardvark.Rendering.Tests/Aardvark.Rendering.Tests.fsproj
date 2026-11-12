@@ -83,6 +83,7 @@
     <Compile Include="Tests\Rendering\SceneGraph\BufferCache.fs" />
     <Compile Include="Tests\Rendering\SceneGraph\RenderSg.fs" />
     <Compile Include="Tests\Rendering\Transparency.fs" />
+    <Compile Include="Tests\Rendering\SpecializationConstants.fs" />
     <Compile Include="Tests\Compute\Images.fs" />
     <Compile Include="Tests\Compute\Buffers.fs" />
     <Compile Include="Tests\Compute\Primitives.fs" />

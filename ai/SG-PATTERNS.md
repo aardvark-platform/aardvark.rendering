@@ -260,6 +260,27 @@ sg |> Sg.texture' DefaultSemantic.DiffuseColorTexture texture
 - Debug visualizations
 - Feature toggles (shadows, lighting models)
 
+## Specialization Constants
+
+A uniform declared in the `SpecializationConstant` scope is baked into the compiled shader instead of being read from a buffer. Use it for values that are fixed per object and that should fold at compile time (array sizes, decoder selection, feature switches that must not branch). Supported types are the scalars `bool`, `int`, `uint32`, `float32` and `float` (double, requires `SupportsShaderFloat64`).
+
+```fsharp
+// Shader declaration: the SpecializationConstant scope marks the member
+type UniformScope with
+    member x.Layers : int = uniform?SpecializationConstant?Layers
+
+// Supplied like any other uniform
+sg |> Sg.uniform' "Layers" 4
+```
+
+**Semantics**:
+- The value comes from the uniform provider by name, like push constants. An unset constant keeps the shader's default, which is zero. A value that cannot be written as the declared type throws when the object is prepared.
+- Every distinct set of value sources (the adaptive values the provider returns) is a distinct pipeline, and a changed value recompiles the pipeline, so a specialization constant is far heavier than a uniform. Do not drive one from a per-frame value.
+- **Vulkan**: the constants become SPIR-V specialization constants. The specialized pipeline is compiled on a background thread while the object renders through the unspecialized pipeline, i.e. with the defaults, until the compile finishes. This avoids a stall on the render thread but means the first frames after creation or after a value change show the defaults. Design the shader so that the defaults are acceptable, or poll the output in tests (see `Tests/Rendering/SpecializationConstants.fs`).
+- **GL**: the scope is an ordinary uniform block. The values are plain uniforms, applied on the first frame; nothing is folded.
+
+The GPU heap uses the mechanism for its per-attribute type ids (`HeapTid0..7`, `HeapTidIdx` in `src/Aardvark.SceneGraph/Heap/HeapPool.fs`): a concrete id folds the attribute decoder to one typed arm, the default 0 reads the id from the allocation header at runtime. Both produce the same pixels, so the asynchronous specialization is invisible there.
+
 ## Gotchas
 
 | # | Issue | Fix |
@@ -274,6 +295,7 @@ sg |> Sg.texture' DefaultSemantic.DiffuseColorTexture texture
 | 8 | ASet Referential Equality | Return child aset directly; `ASet.map id` breaks equality |
 | 9 | DefaultSemantic Symbols | Use `DefaultSemantic.Positions` not `"Positions"` (catches typos) |
 | 10 | Effect Composition Order | Last effect wins; use `Sg.afterEffect` for post-child overrides |
+| 11 | Specialization Constant Defaults | Vulkan renders the shader defaults until the background compile finishes; make defaults acceptable or poll in tests |
 
 ## See Also
 

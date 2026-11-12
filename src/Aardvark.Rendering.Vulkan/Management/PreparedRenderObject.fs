@@ -423,6 +423,28 @@ type DevicePreparedRenderObjectExtensions private() =
             let multisampleState =
                 this.CreateMultisampleState(renderPass, ro.RasterizerState.Multisample, program)
 
+            // specialization constants come from the uniform provider; without any
+            // the pipeline stays unspecialized and keeps its previous identity
+            let specialization, fallback =
+                match this.CreateSpecialization(programLayout.SpecializationConstants, ro.Uniforms) with
+                | Some specialization ->
+                    // the unspecialized pipeline (shared with any unspecialized draw of the
+                    // same state) serves while the specialized one compiles in the background:
+                    // the first frames render with the shader's default constant values, so
+                    // defaults must be acceptable (the heap's default type id 0 decodes at
+                    // runtime and is pixel-identical; a result-changing constant is applied
+                    // a few frames late)
+                    let fallback =
+                        this.CreatePipeline(
+                            program, renderPass, inputState, inputAssembly,
+                            rasterizerState, colorBlendState, depthStencilState,
+                            multisampleState, None, None
+                        )
+
+                    Some specialization, Some fallback
+                | None ->
+                    None, None
+
             let pipeline =
                 this.CreatePipeline(
                     program,
@@ -432,7 +454,9 @@ type DevicePreparedRenderObjectExtensions private() =
                     rasterizerState,
                     colorBlendState,
                     depthStencilState,
-                    multisampleState
+                    multisampleState,
+                    specialization,
+                    fallback
                 )
 
             resources.Add pipeline

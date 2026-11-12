@@ -26,6 +26,7 @@ type PipelineLayout =
         inherit Resource<VkPipelineLayout>
         val public DescriptorSetLayouts : DescriptorSetLayout[]
         val public PushConstants : PushConstantsLayout voption
+        val public SpecializationConstants : MapExt<string, FShade.GLSL.GLSLSpecializationConstant>
         val public PipelineInfo : PipelineInfo
         val public LayerCount : int
         val public PerLayerUniforms : Set<string>
@@ -38,10 +39,11 @@ type PipelineLayout =
             x.Handle <- VkPipelineLayout.Null
 
 
-        new(device, handle, descriptorSetLayouts, pushConstants, info, layerCount : int, perLayer : Set<string>) =
+        new(device, handle, descriptorSetLayouts, pushConstants, specializationConstants, info, layerCount : int, perLayer : Set<string>) =
             { inherit Resource<_>(device, handle);
                 DescriptorSetLayouts = descriptorSetLayouts;
                 PushConstants = pushConstants;
+                SpecializationConstants = specializationConstants;
                 PipelineInfo = info;
                 LayerCount = layerCount;
                 PerLayerUniforms = perLayer
@@ -283,7 +285,7 @@ module PipelineLayout =
                     pEffectLayout           = None
                 }
 
-            return new PipelineLayout(device, !!pHandle, setLayouts, pushConstants, info, layers, perLayer)
+            return new PipelineLayout(device, !!pHandle, setLayouts, pushConstants, iface.specializationConstants, info, layers, perLayer)
         }
 
 [<AbstractClass; Sealed; Extension>]

@@ -62,6 +62,7 @@ let tests (targets: TestTarget list) =
             Rendering.SceneGraph.BufferCache.tests
             Rendering.SceneGraph.RenderSg.tests
             Rendering.Transparency.tests
+            Rendering.SpecializationConstants.tests
         ]
 
         testAllTargets "Compute" [

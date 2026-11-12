@@ -48,26 +48,36 @@ type UniformBufferManager(ctx : Context) =
     let viewCache = ResourceCache<UniformBufferView, int>(None, None)
 
     member x.CreateUniformBuffer(block : FShade.GLSL.GLSLUniformBuffer, scope : Ag.Scope, uniforms : IUniformProvider) : IResource<UniformBufferView, int> =
+        // specialization constants the provider does not supply keep their zero
+        // defaults, as on backends where they specialize the pipeline
+        let optional = block.ubName = "SpecializationConstant"
+
         let values =
             block.ubFields
-            |> List.map (fun f ->
+            |> List.choose (fun f ->
                 let name = f.ufName
 
                 let value =
                     match Uniforms.tryGetDerivedUniform name uniforms with
-                    | ValueSome v -> v
-                    | ValueNone ->
-                        match uniforms.TryGetUniform(scope, Symbol.Create name) with
-                        | ValueSome v -> v
-                        | ValueNone -> failf "could not find uniform '%s'" name
+                    | ValueSome v -> ValueSome v
+                    | ValueNone -> uniforms.TryGetUniform(scope, Symbol.Create name)
 
-                if Object.ReferenceEquals(value, null) then
-                    failf "uniform '%s' is null" name
+                match value with
+                | ValueSome value ->
+                    if Object.ReferenceEquals(value, null) then
+                        failf "uniform '%s' is null" name
 
-                value
+                    Some (f, value)
+
+                | ValueNone ->
+                    if optional then None
+                    else failf "could not find uniform '%s'" name
             )
 
-        let key = values |> List.map (fun v -> v :> obj)
+        // a block with absent members is not identified by its values alone
+        let key =
+            (if optional then [ block :> obj ] else [])
+            @ (values |> List.map (fun (_, v) -> v :> obj))
 
         let alignedSize = (block.ubSize + 255) &&& ~~~255 // needs to be multiple of GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT (currently 256)
 
@@ -75,7 +85,7 @@ type UniformBufferManager(ctx : Context) =
             key,
             fun () ->
                 let writers =
-                    (block.ubFields, values) ||> List.map2 (fun target value ->
+                    values |> List.map (fun (target, value) ->
                         let writer =
                             match value.ContentType |> UniformWriters.tryGetWriter target.ufOffset target.ufType with
                             | Result.Ok writer -> writer
@@ -101,6 +111,9 @@ type UniformBufferManager(ctx : Context) =
                             | ValueNone ->
                                 block <- manager.Alloc(nativeint alignedSize)
                                 store <- System.Runtime.InteropServices.Marshal.AllocHGlobal alignedSize
+
+                                if optional then
+                                    System.Runtime.InteropServices.Marshal.Copy(Array.zeroCreate<byte> alignedSize, 0, store, alignedSize)
                                 //buffer.Commitment(block.Offset, block.Size, true)
 
                                 // record BufferView statistic: use block.Size instead of alignedSize -> allows to see overhead due to chunked buffers and alignment
