@@ -101,6 +101,8 @@ type EventMouse(autoGenerateClickEvents : bool) =
         buttons &&& (buttons - enum 1)
 
     abstract member Down : PixelPosition * MouseButtons -> unit
+    /// Releases held buttons, publishing the release position and clearing each button before callbacks in the default implementation.
+    /// Generated Click or DoubleClick callbacks precede Up; combined buttons are released individually in button order.
     abstract member Up : PixelPosition * MouseButtons -> unit
     abstract member Click : PixelPosition * MouseButtons -> unit
     abstract member DoubleClick : PixelPosition * MouseButtons -> unit
@@ -135,17 +137,19 @@ type EventMouse(autoGenerateClickEvents : bool) =
 
         if b <> MouseButtons.None then
             if buttons.Value.HasFlag b then
-                if autoGenerateClickEvents then
-                    let state = getClickState b
-                    match state.Up pos with
-                    | 1 -> clickEvent.Emit b
-                    | 2 -> doubleClickEvent.Emit b
-                    | _ -> ()
+                let click =
+                    if autoGenerateClickEvents then (getClickState b).Up pos
+                    else 0
 
                 transact (fun () ->
                     position.Value <- pos
                     buttons.Value <- buttons.Value &&& ~~~b
                 )
+
+                match click with
+                | 1 -> clickEvent.Emit b
+                | 2 -> doubleClickEvent.Emit b
+                | _ -> ()
 
                 upEvent.Emit b
 
