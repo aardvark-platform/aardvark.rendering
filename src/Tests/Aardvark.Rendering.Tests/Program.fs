@@ -54,6 +54,7 @@ let tests (targets: TestTarget list) =
             Rendering.Commands.tests
             Rendering.LodRenderer.tests
             Rendering.SceneGraph.tests
+            Rendering.SceneGraphUniforms.tests
         ]
 
         testAllTargets "Compute" [
