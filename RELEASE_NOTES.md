@@ -1,3 +1,5 @@
+- [Sg] Attribute-presence uniforms on direct and indirect render objects now recognize supplied vertex and instance arrays, including empty arrays; single-value attributes, explicit uniform overrides and lookup precedence are unchanged.
+
 ### 5.6.12
 - Fixed adaptive textures and texture arrays to clean up newly created handles when assigning their debug name fails.
 - Reject negative memory-manager resize sizes before changing allocations, preserving live blocks and neighboring payloads.

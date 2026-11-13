@@ -71,13 +71,13 @@ module RenderObject =
 
             rj.Activate <- activate
 
+        let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes")
+        let instanceAttributes = new Providers.AttributeProvider(scope, "InstanceAttributes")
+
         let attributes =
-            AttributeProvider.union rj.VertexAttributes rj.InstanceAttributes
+            AttributeProvider.union vertexAttributes instanceAttributes
 
         rj.Uniforms <- new Providers.UniformProvider(scope, scope.Uniforms, [attributes])
-
-        let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes")
-        let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
 
         rj.VertexAttributes <- vertexAttributes
         rj.InstanceAttributes <- instanceAttributes
