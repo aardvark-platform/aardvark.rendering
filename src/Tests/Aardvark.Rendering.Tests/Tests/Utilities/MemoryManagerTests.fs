@@ -655,6 +655,137 @@ module MemoryManager =
                     for check in unchanged do check "Blocked chunked growth"
                     Expect.equal (counts()) callbacks "Blocked chunked growth does not call the allocator")
 
+        let private ownershipBlocks allocator handle alignment marker =
+            let prefix = allocator.Alloc 1n 8n
+            let block = allocator.Alloc alignment (if handle = Empty then 0n else 8n)
+            let suffix = allocator.Alloc 1n 8n
+            if handle = Freed then allocator.Free block
+            if handle = Zeroed then allocator.Realloc block alignment 0n
+            fill allocator prefix marker
+            fill allocator suffix (marker + 1uy)
+            if handle = Live then fill allocator block (marker + 2uy)
+            [| prefix; block; suffix |]
+
+        let private withOwners ownerChunked receiverChunked aligned handle alignment action =
+            withAllocator ownerChunked true 64n ignore (fun owner ownerCalls ->
+                withAllocator receiverChunked aligned 64n ignore (fun receiver receiverCalls ->
+                    let owned = ownershipBlocks owner handle alignment 0xA0uy
+                    let receiving = ownershipBlocks receiver Live alignment 0xB0uy
+                    Expect.isFalse (Object.ReferenceEquals(owned.[0].Parent, receiving.[0].Parent)) "Distinct manager identities"
+                    action owner owned ownerCalls receiver receiving receiverCalls))
+
+        let private argumentBlock (error : exn option) =
+            match error with
+            | Some (:? ArgumentException as error) -> error.GetType() = typeof<ArgumentException> && error.ParamName = "b"
+            | _ -> false
+
+        let private subsequent context alignment (allocator : TestAllocator) (blocks : Block<byte[]>[]) marker =
+            let prefix, block, suffix = blocks.[0], blocks.[1], blocks.[2]
+            let fresh = allocator.Alloc alignment 4n
+            fill allocator fresh 0xD4uy
+            allocator.Free fresh
+            allocator.Free fresh
+            allocator.Realloc block alignment block.Size
+            if block.IsFree then allocator.Realloc block alignment 8n
+            allocator.Realloc block alignment 4n
+            fill allocator block 0xE5uy
+            allocator.Realloc block alignment 8n
+            Expect.equal (read allocator block |> Array.take 4) (Array.create 4 0xE5uy) (context + ": owning shrink/grow preserves payload")
+            Expect.equal (block.Offset % alignment) 0n (context + ": owning alignment")
+            allocator.Realloc block alignment 0n
+            allocator.Free block
+            allocator.Free block
+            Expect.equal (read allocator prefix) (Array.create 8 marker) (context + ": preceding live guard")
+            Expect.equal (read allocator suffix) (Array.create 8 (marker + 1uy)) (context + ": following live guard")
+
+        let private foreign reallocate =
+            let failures = ResizeArray<string>()
+            for ownerChunked in [false; true] do
+                for receiverChunked in [false; true] do
+                    for aligned in (if reallocate then [false; true] else [true]) do
+                        for handle in [Live; Empty; Freed; Zeroed] do
+                            for alignment in [1n; 3n; 8n] do
+                                let sizes = if reallocate then (if handle = Live then [8n; 4n; 16n; 0n] else [0n; 4n; 16n]) else [0n]
+                                for size in sizes do
+                                    let context = $"owner chunked={ownerChunked}, receiver chunked={receiverChunked}, realloc={reallocate}, aligned overload={aligned}, handle={handle}, alignment={alignment}, size={size}"
+                                    withOwners ownerChunked receiverChunked aligned handle alignment (fun owner owned ownerCalls receiver receiving receiverCalls ->
+                                        let unchanged = neighborhood (Array.append owned receiving)
+                                        let capacities, callbacks = (owner.Capacity(), receiver.Capacity()), (ownerCalls(), receiverCalls())
+                                        let error =
+                                            try
+                                                if reallocate then receiver.Realloc owned.[1] alignment size
+                                                else receiver.Free owned.[1]
+                                                None
+                                            with error -> Some error
+                                        collect failures (context + ": rejection") (fun () ->
+                                            Expect.isTrue (argumentBlock error) $"Expected ArgumentException(b), got {error}")
+                                        collect failures (context + ": unchanged managers") (fun () ->
+                                            Expect.equal (owner.Capacity(), receiver.Capacity()) capacities "Both capacities are unchanged"
+                                            Expect.equal (ownerCalls(), receiverCalls()) callbacks "No allocator callback in either manager"
+                                            for check in unchanged do check context)
+                                        if argumentBlock error then
+                                            collect failures (context + ": owning operations") (fun () ->
+                                                subsequent (context + ": owner") alignment owner owned 0xA0uy
+                                                subsequent (context + ": receiver") (if aligned then alignment else 1n) receiver receiving 0xB0uy))
+            Expect.isEmpty failures (String.concat "\n" failures)
+
+        let foreignFree() = foreign false
+        let foreignRealloc() = foreign true
+
+        let foreignBackingIsolation() =
+            let failures = ResizeArray<string>()
+            for chunked in [false; true] do
+                let context = $"foreign Free, chunked={chunked}"
+                withOwners chunked chunked true Live 1n (fun owner owned _ receiver receiving _ ->
+                    let ownerBacking, receiverBacking = owned.[1].Memory.Value, receiving.[1].Memory.Value
+                    let ownerPayload = Array.copy ownerBacking
+                    let error = try receiver.Free owned.[1]; None with error -> Some error
+                    collect failures (context + ": rejection") (fun () -> Expect.isTrue (argumentBlock error) "Expected ownership rejection")
+                    // Even on original source, this stays inside two bounded managed arrays.
+                    let fresh = receiver.Alloc 1n 8n
+                    collect failures (context + ": receiver storage") (fun () -> same receiverBacking fresh.Memory.Value "A receiver allocation must not adopt the foreign manager's backing")
+                    fill receiver fresh 0xD4uy
+                    collect failures (context + ": live ranges") (fun () ->
+                        Expect.equal (read receiver receiving.[1]) (Array.create 8 0xB2uy) "A foreign Free must not expose an already-live receiver allocation")
+                    collect failures (context + ": foreign payload") (fun () -> Expect.equal ownerBacking ownerPayload "The receiver must not write foreign backing")
+                    if argumentBlock error then
+                        receiver.Free fresh
+                        subsequent context 1n owner owned 0xA0uy
+                        subsequent context 1n receiver receiving 0xB0uy)
+            Expect.isEmpty failures (String.concat "\n" failures)
+
+        let ownershipControls() =
+            for ownerChunked in [false; true] do
+                for receiverChunked in [false; true] do
+                    for aligned in [false; true] do
+                        for handle in [Live; Empty; Freed; Zeroed] do
+                            withOwners ownerChunked receiverChunked aligned handle 1n (fun owner owned ownerCalls receiver receiving receiverCalls ->
+                                let context = $"owner chunked={ownerChunked}, receiver chunked={receiverChunked}, aligned overload={aligned}, handle={handle}"
+                                let unchanged = neighborhood (Array.append owned receiving)
+                                let capacities, callbacks = (owner.Capacity(), receiver.Capacity()), (ownerCalls(), receiverCalls())
+                                for size in [-1n; IntPtr.MinValue] do
+                                    let error = try receiver.Realloc owned.[1] 8n size; None with error -> Some error
+                                    match error with
+                                    | Some (:? ArgumentOutOfRangeException as error) -> Expect.equal error.ParamName "size" $"{context}, size={size}: negative-size rejection precedes ownership"
+                                    | _ -> failtestf "%s, size=%d: expected ArgumentOutOfRangeException(size), got %A" context size error
+                                    Expect.equal (owner.Capacity(), receiver.Capacity()) capacities (context + ": negative resize retains capacities")
+                                    Expect.equal (ownerCalls(), receiverCalls()) callbacks (context + ": negative resize invokes no callback")
+                                    for check in unchanged do check context
+                                subsequent (context + ": owning manager") 1n owner owned 0xA0uy
+                                subsequent (context + ": receiving manager") 1n receiver receiving 0xB0uy)
+            for chunked in [false; true] do
+                let expected = ApplicationException($"owned Free, chunked={chunked}")
+                let mutable armed = false
+                withAllocator chunked true 16n (fun index -> if armed && index = (if chunked then 1 else 3) then throwAllocator expected) (fun allocator _ ->
+                    let block = allocator.Alloc 1n 64n
+                    armed <- true
+                    let actual = try allocator.Free block; None with error -> Some error
+                    armed <- false
+                    match actual with
+                    | Some error -> same expected error "Owned Free retains allocator error identity"
+                                    Expect.stringContains error.StackTrace "throwAllocator" "Owned Free retains allocator throw site"
+                    | None -> failtest "Expected owning Free callback error")
+
     let tests (target: TestTarget) =
         [
             "Contiguous manager updates size when shrinking", Cases.contiguous
@@ -668,6 +799,11 @@ module MemoryManager =
             "Chunked competing frees preserve live siblings",              Cases.competingSiblingFrees
             "Chunked sequential duplicate frees retain the fast path",     Cases.sequentialDuplicateFrees
             "Chunked concurrent distinct frees coalesce and retire once",  Cases.concurrentDistinctFrees
+
+            "Ownership.Foreign frees preserve both managers",               Reallocation.foreignFree
+            "Ownership.Foreign resizes preserve both managers",             Reallocation.foreignRealloc
+            "Ownership.Foreign frees cannot reuse live or foreign backing", Reallocation.foreignBackingIsolation
+            "Ownership.Owning operations retain precedence and errors",     Reallocation.ownershipControls
 
             "Reallocation.Negative live sizes preserve owners",    Reallocation.negativeLive
             "Reallocation.Negative inactive sizes preserve state", Reallocation.negativeInactive

@@ -290,7 +290,10 @@ module Management =
                             x.Alloc size
                 )
 
+        /// Releases an owned block; repeated releases of its inactive handles are no-ops.
+        /// <exception cref="ArgumentException"><paramref name="b"/> is not owned by this manager, even if already free.</exception>
         member x.Free(b : Block<'a>) =
+            if not (obj.ReferenceEquals(b.Parent, x)) then invalidArg (nameof b) "The block is not owned by this memory manager."
             if not b.IsFree then
                 lock free (fun () ->
                     if not b.IsFree then
@@ -341,9 +344,12 @@ module Management =
 
                 )
 
+        /// Resizes an owned block, including inactive handles. A negative size is rejected before checking ownership.
+        /// <exception cref="ArgumentException"><paramref name="b"/> is not owned by this manager, even for a no-op resize.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The requested size is negative.</exception>
         member x.Realloc(b : Block<'a>, align : nativeint, size : nativeint) =
             if size < 0n then raise (ArgumentOutOfRangeException(nameof size, "The size must not be negative."))
+            if not (obj.ReferenceEquals(b.Parent, x)) then invalidArg (nameof b) "The block is not owned by this memory manager."
             if b.Size <> size then
                 lock free (fun () ->
                     if b.IsFree then
@@ -408,6 +414,8 @@ module Management =
 
                 )
 
+        /// Resizes an owned block, including inactive handles. A negative size is rejected before checking ownership.
+        /// <exception cref="ArgumentException"><paramref name="b"/> is not owned by this manager, even for a no-op resize.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The requested size is negative.</exception>
         member x.Realloc(b : Block<'a>, size : nativeint) =
             x.Realloc(b, 1n, size)
@@ -533,7 +541,10 @@ module Management =
                             x.Alloc size
                 )
 
+        /// Releases an owned block; repeated releases of its inactive handles are no-ops.
+        /// <exception cref="ArgumentException"><paramref name="b"/> is not owned by this manager, even if already free.</exception>
         member x.Free(b : Block<'a>) =
+            if not (obj.ReferenceEquals(b.Parent, x)) then invalidArg (nameof b) "The block is not owned by this memory manager."
             if not b.IsFree then
                 lock free (fun () ->
                     if not b.IsFree then
@@ -576,9 +587,12 @@ module Management =
 
                 )
 
+        /// Resizes an owned block, including inactive handles. A negative size is rejected before checking ownership.
+        /// <exception cref="ArgumentException"><paramref name="b"/> is not owned by this manager, even for a no-op resize.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The requested size is negative.</exception>
         member x.Realloc(b : Block<'a>, align : nativeint, size : nativeint) =
             if size < 0n then raise (ArgumentOutOfRangeException(nameof size, "The size must not be negative."))
+            if not (obj.ReferenceEquals(b.Parent, x)) then invalidArg (nameof b) "The block is not owned by this memory manager."
             if b.Size <> size then
                 lock free (fun () ->
                     if size = 0n then
@@ -629,6 +643,8 @@ module Management =
                             failwithf "[MemoryManager] cannot realloc when no mcopy given"
                 )
 
+        /// Resizes an owned block, including inactive handles. A negative size is rejected before checking ownership.
+        /// <exception cref="ArgumentException"><paramref name="b"/> is not owned by this manager, even for a no-op resize.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The requested size is negative.</exception>
         member x.Realloc(b : Block<'a>, size : nativeint) =
             x.Realloc(b, 1n, size)
