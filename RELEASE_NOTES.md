@@ -1,3 +1,5 @@
+- Memory-manager `Free` and `Realloc` now reject blocks owned by another manager before changing state, including empty or freed handles and no-op resizes, preventing allocation corruption; negative resize sizes retain their existing error precedence.
+
 ### 5.6.12
 - Fixed adaptive textures and texture arrays to clean up newly created handles when assigning their debug name fails.
 - Reject negative memory-manager resize sizes before changing allocations, preserving live blocks and neighboring payloads.
