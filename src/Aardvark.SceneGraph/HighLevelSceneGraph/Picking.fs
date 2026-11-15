@@ -28,7 +28,12 @@ module ``Sg Picking Extensions`` =
             | Cylinder c       -> c.BoundingBox3d
             | Triangle t       -> t.BoundingBox3d
             | Triangles b      -> b.Bounds
-            | TriangleArray ts -> Box3d(ts |> Array.map _.BoundingBox3d)
+            | TriangleArray ts ->
+                if isNull ts then nullArg "array"
+                let mutable bounds = Box3d.Invalid
+                for triangle in ts do
+                    bounds.ExtendBy triangle.BoundingBox3d
+                bounds
             | Custom(b, _)     -> b
 
     type Pickable = { trafo : Trafo3d; shape : PickShape }
