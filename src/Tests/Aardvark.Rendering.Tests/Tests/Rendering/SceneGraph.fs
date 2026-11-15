@@ -580,6 +580,119 @@ module SceneGraph =
 
     module Picking =
 
+        let private boundsInputs () =
+            let triangle = Triangle3d(V3d(-2.0, 1.0, 4.0), V3d(3.0, -5.0, 2.0), V3d(1.0, 7.0, -6.0))
+            let point p = Triangle3d(p, p, p)
+            let negativeZero = BitConverter.Int64BitsToDouble Int64.MinValue
+            let nan = BitConverter.Int64BitsToDouble 0x7FF8000000000123L
+            [|
+                yield "empty", [||]
+                yield "singleton", [| triangle |]
+                yield "repeated", Array.replicate 32 triangle
+                yield "degenerate", [| point (V3d(8.0)); Triangle3d(V3d(-3.0), V3d.Zero, V3d(3.0)); triangle |]
+                yield "signed zero", [| point (V3d(negativeZero, 0.0, negativeZero)); point (V3d(0.0, negativeZero, 0.0)) |]
+                for value in [| nan; infinity; -infinity |] do
+                    for axis in 0 .. 2 do
+                        let mutable p = V3d.Zero
+                        p.[axis] <- value
+                        let unusual = Triangle3d(p, V3d.One, -V3d.One)
+                        yield $"value={value}, axis={axis}", [| unusual; triangle; point p |]
+            |]
+
+        let private expectBoundsBits (actual : Box3d) (expected : Box3d) context =
+            for axis in 0 .. 2 do
+                Expect.equal (BitConverter.DoubleToInt64Bits actual.Min.[axis])
+                             (BitConverter.DoubleToInt64Bits expected.Min.[axis]) $"{context}, Min[{axis}]"
+                Expect.equal (BitConverter.DoubleToInt64Bits actual.Max.[axis])
+                             (BitConverter.DoubleToInt64Bits expected.Max.[axis]) $"{context}, Max[{axis}]"
+
+        let private originalBounds (triangles : Triangle3d[]) =
+            Box3d(triangles |> Array.map _.BoundingBox3d)
+
+        let triangleBoundsCompatibility _ =
+            for name, triangles in boundsInputs() do
+                // Both input orders and every starting triangle matter for NaNs and signed zeros.
+                for reverse in [false; true] do
+                    let triangles = if reverse then Array.rev triangles else triangles
+                    for start in 0 .. max 0 (triangles.Length - 1) do
+                        let ordered = Array.init triangles.Length (fun i -> triangles.[(start + i) % triangles.Length])
+                        let expected = originalBounds ordered
+                        let actual = PickShape.bounds (PickShape.TriangleArray ordered)
+                        expectBoundsBits actual expected $"{name}, reversed={reverse}, start={start}"
+
+            let triangle = Triangle3d(V3d(-2.0, 1.0, 4.0), V3d(3.0, -5.0, 2.0), V3d(1.0, 7.0, -6.0))
+            expectBoundsBits (PickShape.bounds (PickShape.TriangleArray [| triangle |]))
+                             (Box3d(V3d(-2.0, -5.0, -6.0), V3d(3.0, 7.0, 4.0))) "singleton analytic bounds"
+            expectBoundsBits (PickShape.bounds (PickShape.TriangleArray [||])) Box3d.Invalid "empty is invalid"
+
+        let private boundsTransforms =
+            [| Trafo3d.Identity
+               Trafo3d.Translation(17.0, -23.0, 4.0)
+               Trafo3d.Scale(-2.0, 3.0, 0.5) * Trafo3d.RotationEuler(0.3, -0.7, 1.2) * Trafo3d.Translation(5.0, 2.0, -8.0) |]
+
+        let transformedTriangleBounds _ =
+            for name, triangles in boundsInputs() do
+                let local = originalBounds triangles
+                for index, trafo in Array.indexed boundsTransforms do
+                    let expected =
+                        if local.IsInvalid then Box3d.Invalid
+                        else Box3d(local.ComputeCorners() |> Array.map trafo.Forward.TransformPosProj)
+                    let pickable = PickShape.TriangleArray triangles |> Pickable.ofShape |> Pickable.transform trafo
+                    expectBoundsBits (Pickable.bounds pickable) expected $"{name}, transform={index}"
+
+        let nullTriangleBounds _ =
+            let shape = PickShape.TriangleArray null
+            let actions =
+                [| yield "shape", (fun () -> PickShape.bounds shape)
+                   for index, trafo in Array.indexed boundsTransforms do
+                       let pickable = shape |> Pickable.ofShape |> Pickable.transform trafo
+                       yield $"pickable transform={index}", (fun () -> Pickable.bounds pickable) |]
+            for name, action in actions do
+                let error =
+                    try
+                        action() |> ignore
+                        None
+                    with e -> Some e
+                match error with
+                | Some (:? ArgumentNullException as e) ->
+                    Expect.equal (e.GetType()) typeof<ArgumentNullException> $"{name}: exact exception type"
+                    Expect.equal e.ParamName "array" $"{name}: parameter name"
+                | _ -> failtestf "%s: expected ArgumentNullException(array), got %A" name error
+
+        let triangleBoundsStorage _ =
+            let iterations = 64
+            let measure action =
+                for _ in 1 .. 128 do action() |> ignore
+                let mutable result = Box3d.Invalid
+                let before = GC.GetAllocatedBytesForCurrentThread()
+                for _ in 1 .. iterations do result <- action()
+                let allocated = GC.GetAllocatedBytesForCurrentThread() - before
+                result, allocated
+
+            let measurements =
+                [| for count in [0; 1; 64; 4096] do
+                       let triangles = Array.init count (fun i ->
+                           let p = V3d(float i, float (i % 7), float (i % 13))
+                           Triangle3d(p, p + V3d.XAxis, p + V3d.YAxis))
+                       let shape = PickShape.TriangleArray triangles
+                       let pickable = shape |> Pickable.ofShape |> Pickable.transform boundsTransforms.[2]
+                       let expectedLocal = originalBounds triangles
+                       for name, action, budget in
+                           [| "shape", (fun () -> PickShape.bounds shape), 64L
+                              "pickable", (fun () -> Pickable.bounds pickable), 1024L |] do
+                           let result, allocated = measure action
+                           let expected =
+                               if name = "shape" || expectedLocal.IsInvalid then expectedLocal
+                               else Box3d(expectedLocal.ComputeCorners() |> Array.map boundsTransforms.[2].Forward.TransformPosProj)
+                           expectBoundsBits result expected $"{name}, count={count}: measured result"
+                           yield name, count, allocated, int64 iterations * budget |]
+            let errors =
+                measurements |> Array.choose (fun (name, count, allocated, budget) ->
+                    if allocated > budget then Some $"{name}, count={count}: {allocated} B exceeds fixed {budget} B budget"
+                    else None)
+            Expect.isTrue (Array.isEmpty errors)
+                          ("Bounds evaluation must not allocate storage proportional to triangle count: " + String.concat "; " errors)
+
         type private CountingBuffer(data : Array) =
             let buffer = ArrayBuffer data
             let mutable downloadCount = 0
@@ -1319,6 +1432,11 @@ module SceneGraph =
                 "Bounding Box.Scope-aware cache root and invalid bounds",   BoundingBox.rootAndInvalid
                 "Bounding Box.Scope-aware cache concurrent first lookup",   BoundingBox.concurrentSameScope
                 "Bounding Box.Scope-aware cache concurrent warmed lookup",  BoundingBox.concurrentWarmedScopes
+
+                "Picking.Bounds.Ordered triangle compatibility", Picking.triangleBoundsCompatibility
+                "Picking.Bounds.Transformed triangle bounds",     Picking.transformedTriangleBounds
+                "Picking.Bounds.Null arrays retain rejection",    Picking.nullTriangleBounds
+                "Picking.Bounds.Storage is independent of count", Picking.triangleBoundsStorage
 
                 "Picking.DrawCallInfo subranges",                    Picking.drawCallRanges
                 "Picking.Automatic FaceVertexCount",                 Picking.automaticFaceVertexCount

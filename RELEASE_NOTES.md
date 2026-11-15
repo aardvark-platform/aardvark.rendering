@@ -1,3 +1,5 @@
+- Reduced temporary allocations when computing picking bounds for triangle arrays, without changing their bounds or transformed results.
+
 ### 5.6.12
 - Fixed adaptive textures and texture arrays to clean up newly created handles when assigning their debug name fails.
 - Reject negative memory-manager resize sizes before changing allocations, preserving live blocks and neighboring payloads.
