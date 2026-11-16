@@ -591,6 +591,11 @@ module ``Test Utilities`` =
     type IBackendTexture with
         member x.Clear(color : C4b) = x.Runtime.Upload(x, PixImage.solid x.Size.XY color)
 
+    /// Acquires the resource and releases it when the returned value is disposed.
+    let useResource (resource : IAdaptiveResource) =
+        resource.Acquire()
+        { new IDisposable with member _.Dispose() = resource.Release() }
+
     type UnexpectedPassException() =
         inherit Exception("Expected an exception but none occurred")
 

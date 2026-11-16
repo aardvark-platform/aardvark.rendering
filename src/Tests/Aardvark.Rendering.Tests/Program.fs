@@ -63,6 +63,8 @@ let tests (targets: TestTarget list) =
             Rendering.SceneGraph.RenderSg.tests
             Rendering.Transparency.tests
             Rendering.SpecializationConstants.tests
+            Rendering.Heap.Uniforms.tests
+            Rendering.Heap.Gauntlet.tests
         ]
 
         testAllTargets "Compute" [

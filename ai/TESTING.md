@@ -86,7 +86,10 @@ namespace Aardvark.Rendering.Tests.Texture
 A subfolder below a category may add a namespace segment with its name, and its groups
 carry that name as a prefix. For example, the files in `Tests/Rendering/SceneGraph/` use
 `namespace Aardvark.Rendering.Tests.Rendering.SceneGraph` and register groups such as
-`SceneGraph.Picking`, discovered as `Rendering.Cpu.SceneGraph.Picking.<case>`.
+`SceneGraph.Picking`, discovered as `Rendering.Cpu.SceneGraph.Picking.<case>`; the files in
+`Tests/Rendering/Heap/` register `Heap.Uniforms` and `Heap.Gauntlet` (Vulkan only), discovered as
+`Rendering.Vulkan.Heap.Uniforms.<case>` and `Rendering.Vulkan.Heap.Gauntlet.<case>`; `Golden.fs`,
+`Churn.fs` and `Deferred.fs` hold the probes that `Gauntlet.fs` registers.
 
 Put test implementations in a `Cases` module. Another descriptive module is acceptable
 when a large group has meaningful subgroups. Only actual test-case implementations should
@@ -181,7 +184,8 @@ finally EnvVar.SOME_SWITCH <- null
 The Vulkan backend counts live resources and descriptor sets device-wide in
 `Resource.LiveCount` and `DescriptorSet.LiveCount` (`src/Aardvark.Rendering.Vulkan/Resources/`).
 A leak test renders a few warm-up frames, records both counts, runs the per-frame path
-under test and expects the counts to stay flat.
+under test and expects the counts to stay flat; the heap probes in
+`Tests/Rendering/Heap/Golden.fs` also compare `Device.GetMemoryStatistics()` before and after.
 
 ## Attribute-Grammar Rules
 

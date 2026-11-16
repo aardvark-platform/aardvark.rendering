@@ -104,6 +104,12 @@ All switches are read through `EnvVar` (see DEBUG.md); their XML docs in
 | `AARDVARK_HEAP_NO_SPEC` | Never materialize typed partitions. |
 | `AARDVARK_HEAP_DUMP_RECORDS` | Log statistics about the clustered draw records. |
 
+## Tests
+
+`Tests/Rendering/Heap/` holds the `Heap.Uniforms` group (every derived uniform against its CPU
+counterpart) and the `Heap.Gauntlet` group of probes that compare heap renders pixel by pixel
+with the classic per-object render (see TESTING.md). Both run on Vulkan only.
+
 ## Known Issues
 
 - Booting a very large scene (hundreds of thousands of objects) is bound by the CPU and the
