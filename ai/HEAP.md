@@ -110,6 +110,12 @@ All switches are read through `EnvVar` (see DEBUG.md); their XML docs in
 counterpart) and the `Heap.Gauntlet` group of probes that compare heap renders pixel by pixel
 with the classic per-object render (see TESTING.md). Both run on Vulkan only.
 
+## Example and Benchmarks
+
+`src/Examples (netcore)/39 - HeapSpike/` is a showcase scene with many objects, textures and
+picking, plus benchmarks for startup, rendering, edits, transform chains and the GPU gather
+and derive paths, and a GLSL dump of the generated shaders.
+
 ## Known Issues
 
 - Booting a very large scene (hundreds of thousands of objects) is bound by the CPU and the
