@@ -92,6 +92,7 @@ let tests (targets: TestTarget list) =
             Other.UniformWriter.tests
             Other.AdaptiveResource.tests
             Other.Input.tests
+            Other.KeyboardState.tests
             Other.ContextCreation.tests
             Other.VulkanWrapper.tests
             Other.IDictionaryStructuralComparer.tests

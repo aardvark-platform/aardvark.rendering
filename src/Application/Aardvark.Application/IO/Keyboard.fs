@@ -45,35 +45,41 @@ type EventKeyboard() =
     let rCtrl = lazy isDown.GetOrAdd(Keys.RightCtrl, fun k -> AVal.init (downKeys.Contains k))
     let ctrl = lazy (lCtrl.Value %|| rCtrl.Value)
 
+    /// Publishes held state before DownWithRepeats, Down and key-specific callbacks.
+    /// Nested input events retain their resulting state when dispatch continues.
     abstract member KeyDown : Keys -> unit
+    /// Publishes released state before Up and key-specific callbacks.
+    /// Nested input events retain their resulting state when dispatch continues.
     abstract member KeyUp : Keys -> unit
     abstract member KeyPress : char -> unit
     /// Releases every held key and clears its adaptive state.
     abstract member Reset : unit -> unit
 
     default x.KeyDown(k : Keys) =
+        let isNew = downKeys.Add k
+        if isNew then
+            match isDown.TryGetValue k with
+            | true, e -> transact (fun () -> e.Value <- true)
+            | _ -> ()
+
         downWithRepeats.Emit k
-        if downKeys.Add k then
+        if isNew then
             downEvent.Emit k
 
             match downEvents.TryGetValue k with
             | true, e -> e.Emit ()
             | _ -> ()
 
-            match isDown.TryGetValue k with
-            | true, e -> transact (fun () -> e.Value <- true)
-            | _ -> ()
-
     default x.KeyUp(k : Keys) =
         if downKeys.Remove k then
+            match isDown.TryGetValue k with
+            | true, e -> transact (fun () -> e.Value <- false)
+            | _ -> ()
+
             upEvent.Emit k
 
             match upEvents.TryGetValue k with
             | true, e -> e.Emit ()
-            | _ -> ()
-
-            match isDown.TryGetValue k with
-            | true, e -> transact (fun () -> e.Value <- false)
             | _ -> ()
 
     default x.KeyPress(c : char) =
