@@ -49,6 +49,9 @@
     <Compile Include="HighLevelSceneGraph\Picking.fs" />
     <Compile Include="HighLevelSceneGraph\Instancing.fs" />
     <Compile Include="HighLevelSceneGraph\GeometrySet.fs" />
+    <Compile Include="Heap\HeapAtlas.fs" />
+    <Compile Include="Heap\HeapAtlasPool.fs" />
+    <Compile Include="Heap\HeapPool.fs" />
     <Compile Include="SgFSharp.fs" />
     <Compile Include="Primitives.fs" />
     <Compile Include="IndexedGeometryPrimitives.fs" />

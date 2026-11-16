@@ -250,3 +250,4 @@ State accumulates as you pipe through applicators.
 - `src/Aardvark.SceneGraph/Core/Sg.fs` - Concrete node types
 - `src/Aardvark.SceneGraph/Core/RenderSg.fs`, `Core/TraversalState.fs` - `IRenderSg` direct render path (see SG-SEMANTICS.md)
 - `src/Aardvark.SceneGraph/SgFSharp.fs` - F# builder API
+- `src/Aardvark.SceneGraph/Heap/HeapPool.fs` - GPU heap (`Sg.heap`), see HEAP.md

@@ -55,6 +55,14 @@ type EnvVar private () =
     static let oitABufferDebug = EnvVarCell "AARDVARK_OIT_ABUFFER_DEBUG"
     static let legacySg = EnvVarCell "AARDVARK_LEGACY_SG"
     static let vulkanDevice = EnvVarCell "AARDVARK_VULKAN_DEVICE"
+    static let heapDf32 = EnvVarCell "AARDVARK_HEAP_DF32"
+    static let heapNoClusters = EnvVarCell "AARDVARK_HEAP_NO_CLUSTERS"
+    static let heapNoChain = EnvVarCell "AARDVARK_HEAP_NOCHAIN"
+    static let heapStaticGeom = EnvVarCell "AARDVARK_HEAP_STATIC_GEOM"
+    static let heapEditProf = EnvVarCell "AARDVARK_HEAP_EDIT_PROF"
+    static let heapPageWords = EnvVarCell "AARDVARK_HEAP_PAGE_WORDS"
+    static let heapNoSpec = EnvVarCell "AARDVARK_HEAP_NO_SPEC"
+    static let heapDumpRecords = EnvVarCell "AARDVARK_HEAP_DUMP_RECORDS"
 
     /// Returns whether a switch value enables it: "1", "on", "true" and "yes" (ignoring case
     /// and surrounding whitespace) do, everything else, including null, does not.
@@ -121,3 +129,57 @@ type EnvVar private () =
     static member AARDVARK_LEGACY_SG
         with get () = legacySg.Value
         and set (value : string) = legacySg.Value <- value
+
+    /// Set to 1 to make the GPU heap use its df32 (two-float) derived-uniform kernels even on a backend
+    /// with shader doubles, to force or validate the MoltenVK path on the desktop. Read when a bucket
+    /// is built.
+    static member AARDVARK_HEAP_DF32
+        with get () = heapDf32.Value
+        and set (value : string) = heapDf32.Value <- value
+
+    /// Set to 1 to disable the GPU heap's clustered draw records (size-class instanced draws) in
+    /// favour of one record per slot, for A/B measurements. Read when a bucket is built.
+    static member AARDVARK_HEAP_NO_CLUSTERS
+        with get () = heapNoClusters.Value
+        and set (value : string) = heapNoClusters.Value <- value
+
+    /// Set to 1 to disable the GPU heap's trafo chain even for render objects that expose a model
+    /// trafo stack; they fall back to the CPU-folded model trafo. For A/B measurements of the chain
+    /// against the folded path on the same inputs. Read when a render object is added.
+    static member AARDVARK_HEAP_NOCHAIN
+        with get () = heapNoChain.Value
+        and set (value : string) = heapNoChain.Value <- value
+
+    /// Set to 1 to disable the GPU heap's adaptive machinery (geometry re-upload writers, draw-call,
+    /// pick-id and model-stack watchers); geometry is then snapshotted when it is added. For bisecting
+    /// regressions. Read when a render object is added.
+    static member AARDVARK_HEAP_STATIC_GEOM
+        with get () = heapStaticGeom.Value
+        and set (value : string) = heapStaticGeom.Value <- value
+
+    /// Set to 1 to accumulate the CPU milliseconds the GPU heap spends per named phase across a frame
+    /// (updater phases and every mirror flush) and log them at the next updater entry. Read once when
+    /// the heap module is initialized.
+    static member AARDVARK_HEAP_EDIT_PROF
+        with get () = heapEditProf.Value
+        and set (value : string) = heapEditProf.Value <- value
+
+    /// The page size of the GPU heap's storage in 32-bit words (at least 1024; smaller or invalid
+    /// values are ignored), overriding the size given to HeapStorage. Tiny pages force cross-page
+    /// allocation and per-page draws for testing the multi-page path. Read when a HeapStorage is
+    /// created.
+    static member AARDVARK_HEAP_PAGE_WORDS
+        with get () = heapPageWords.Value
+        and set (value : string) = heapPageWords.Value <- value
+
+    /// Set to 1 to never materialize typed partitions in the GPU heap; everything renders through the
+    /// dynamic pipeline. For bisecting regressions. Read when a heap pool is created.
+    static member AARDVARK_HEAP_NO_SPEC
+        with get () = heapNoSpec.Value
+        and set (value : string) = heapNoSpec.Value <- value
+
+    /// Set to 1 to log statistics about the GPU heap's clustered draw records whenever they are
+    /// rebuilt. Read on every rebuild.
+    static member AARDVARK_HEAP_DUMP_RECORDS
+        with get () = heapDumpRecords.Value
+        and set (value : string) = heapDumpRecords.Value <- value
