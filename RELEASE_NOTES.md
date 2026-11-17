@@ -1,4 +1,4 @@
-- Fixed raytracing `TraceTo` results to retain adaptive target textures for their active lifetime and release them after task disposal, including when disposal throws. Plain adaptive-value targets remain caller-owned.
+- Fixed raytracing `TraceTo` results to retain adaptive target textures for their active lifetime and release them after task disposal, including when disposal throws. Failed acquisition can be released without unbalancing subsequent lifetimes. Plain adaptive-value targets remain caller-owned.
 
 ### 5.6.11
 - Update to .NET 10

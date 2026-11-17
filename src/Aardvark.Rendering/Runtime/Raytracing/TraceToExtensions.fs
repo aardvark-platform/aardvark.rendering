@@ -37,7 +37,7 @@ type CompileTraceToExtensions() =
 module AdaptiveTraceToTypes =
 
     /// <summary>Adaptively traces into a target retained for each active result lifetime.</summary>
-    /// <remarks>Adaptive-resource targets are acquired until the compiled task is disposed. Plain aval targets retain caller-managed texture ownership. Target release is attempted even if task disposal fails, without masking the task exception.</remarks>
+    /// <remarks>Adaptive-resource targets are acquired until the compiled task is disposed. Plain aval targets retain caller-managed texture ownership. Target release is attempted even if task disposal fails, without masking the task exception. A failed acquisition must still be released before reusing the result.</remarks>
     type AdaptiveTraceResult(runtime : IRaytracingRuntime, pipeline : RaytracingPipelineState, target : aval<IBackendTexture>) =
         inherit AdaptiveResource<IBackendTexture>()
 
@@ -51,7 +51,8 @@ module AdaptiveTraceToTypes =
             task.Acquire()
 
         override x.Destroy() =
-            try task.Release()
+            // Target acquisition may have failed before acquiring this private task.
+            try task.ReleaseAll()
             with _ ->
                 try target.Release() with _ -> ()
                 reraise()

@@ -19,6 +19,12 @@ module TraceTo =
         let private throwTask (error : exn) : unit = raise error
         [<MethodImpl(MethodImplOptions.NoInlining)>]
         let private throwTarget (error : exn) : unit = raise error
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
+        let private throwAcquire (error : exn) : unit = raise error
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
+        let private throwCompile (error : exn) : unit = raise error
+        [<MethodImpl(MethodImplOptions.NoInlining)>]
+        let private throwRun (error : exn) : unit = raise error
 
         type private Texture(runtime : ITextureRuntime, size : V3i, dimension, format, levels, samples, id : int, events : ResizeArray<string>) =
             let mutable name = null
@@ -50,11 +56,13 @@ module TraceTo =
             member val Creates = 0 with get, set
             member val Destroys = 0 with get, set
             member val CleanupError : exn option = None with get, set
+            member val AcquireError : exn option = None with get, set
             member val Tokens = ResizeArray<RenderToken>()
             member _.Handle = handle
             override x.Create() =
                 x.Creates <- x.Creates + 1
                 events.Add "target create"
+                match x.AcquireError with Some error -> throwAcquire error | None -> ()
             override x.Destroy() =
                 x.Destroys <- x.Destroys + 1
                 events.Add "target release"
@@ -90,7 +98,7 @@ module TraceTo =
                     x.Tokens.Add rt
                     x.GetValue(token, rt)
 
-        type private Task(commands : alist<RaytracingCommand>, uniform : IAdaptiveValue option, events : ResizeArray<string>, error : unit -> exn option) =
+        type private Task(commands : alist<RaytracingCommand>, uniform : IAdaptiveValue option, events : ResizeArray<string>, error : unit -> exn option, runError : unit -> exn option) =
             inherit AdaptiveObject()
             let values = AList.toAVal commands
             let mutable name = null
@@ -119,7 +127,8 @@ module TraceTo =
                             Expect.equal size target.Dimensions "Commands must consume the current target size"
                             textures <- [|target|]
                             x.Sizes.Add size
-                        | other -> failtestf "Unexpected trace commands: %A" other)
+                        | other -> failtestf "Unexpected trace commands: %A" other
+                        match runError() with Some error -> throwRun error | None -> ())
                 member x.Dispose() =
                     events.Add "task dispose start"
                     x.Disposals <- x.Disposals + 1
@@ -133,6 +142,8 @@ module TraceTo =
             let textures = ResizeArray<Texture>()
             let tasks = ResizeArray<Task>()
             member val TaskError : exn option = None with get, set
+            member val CompileError : exn option = None with get, set
+            member val RunError : exn option = None with get, set
             member _.Events = events
             member _.Textures = textures
             member _.Tasks = tasks
@@ -148,8 +159,9 @@ module TraceTo =
                 member _.MaxRayRecursionDepth = 4
                 member _.GetMaxMicromapSubdivisionLevel _ = unexpected()
                 member x.CompileTrace(pipeline, commands) =
+                    match x.CompileError with Some error -> throwCompile error | None -> ()
                     let uniform = pipeline.Uniforms.TryGetUniform(Ag.Scope.Root, semantic) |> ValueOption.toOption
-                    let task = new Task(commands, uniform, events, fun () -> x.TaskError)
+                    let task = new Task(commands, uniform, events, (fun () -> x.TaskError), (fun () -> x.RunError))
                     tasks.Add task
                     task :> IRaytracingTask
             interface IAccelerationStructureRuntime with
@@ -203,6 +215,9 @@ module TraceTo =
             interface IDisposable with
                 member _.Dispose() =
                     runtime.TaskError <- None
+                    runtime.CompileError <- None
+                    runtime.RunError <- None
+                    source.AcquireError <- None
                     source.CleanupError <- None
                     try result.ReleaseAll() with _ -> ()
                     for task in runtime.Tasks do if task.Disposals = 0 then (task :> IRaytracingTask).Dispose()
@@ -357,6 +372,64 @@ module TraceTo =
                                 ["task dispose start"; "task dispose end"; "target release"] (context + ": dispose task before releasing target")
                             doneTextures context fixture.Runtime
 
+        let acquisitionFailures() =
+            for route in routes do
+                for uniform in [false; true] do
+                    for all in [false; true] do
+                        use fixture = new Fixture(route, uniform)
+                        let context = $"route={route}, uniform={uniform}, all={all}"
+                        let error = InvalidOperationException("target acquisition")
+                        fixture.Source.AcquireError <- Some error
+                        let actual =
+                            try fixture.Result.Acquire(); None
+                            with error -> Some error
+                        Expect.isTrue (actual |> Option.exists (fun e -> obj.ReferenceEquals(e, error))) (context + ": acquisition error identity")
+                        Expect.stringContains error.StackTrace "throwAcquire" (context + ": acquisition throw stack")
+                        // AdaptiveResource increments before Create, including when Create throws.
+                        if all then fixture.Result.ReleaseAll() else fixture.Result.Release()
+                        Expect.equal fixture.Source.Owners 0 (context + ": failed target acquisition balanced")
+                        Expect.equal fixture.Runtime.Tasks.Count 0 (context + ": failed acquisition cannot compile")
+                        fixture.Source.AcquireError <- None
+                        for lifetime in 1 .. 2 do
+                            fixture.Result.Acquire()
+                            fixture.Get(RenderToken.Zero) |> ignore
+                            fixture.Result.ReleaseAll()
+                            Expect.equal fixture.Runtime.Tasks.[lifetime - 1].Disposals 1 (context + ": later task lifetime remains balanced")
+                            Expect.equal fixture.Source.Owners 0 (context + ": later target lifetime remains balanced")
+                        doneTextures context fixture.Runtime
+
+        let evaluationFailures() =
+            for route in routes do
+                for uniform in [false; true] do
+                    for stage in ["compile"; "run"] do
+                        for retry in [false; true] do
+                            for external in [false; true] do
+                                use fixture = new Fixture(route, uniform)
+                                let context = $"route={route}, uniform={uniform}, stage={stage}, retry={retry}, external={external}"
+                                let source = sourceResource fixture
+                                if external then source.Acquire()
+                                fixture.Result.Acquire()
+                                let error = InvalidOperationException(stage + " failure")
+                                if stage = "compile" then fixture.Runtime.CompileError <- Some error
+                                else fixture.Runtime.RunError <- Some error
+                                let actual =
+                                    try fixture.Get(RenderToken.Zero) |> ignore; None
+                                    with error -> Some error
+                                Expect.isTrue (actual |> Option.exists (fun e -> obj.ReferenceEquals(e, error))) (context + ": evaluation error identity")
+                                Expect.stringContains error.StackTrace (if stage = "compile" then "throwCompile" else "throwRun") (context + ": evaluation throw stack")
+                                Expect.equal fixture.Source.Owners ((if external then 1 else 0) + 1 + (if uniform && stage = "run" then 1 else 0)) (context + ": failed evaluation retains active references")
+                                fixture.Runtime.CompileError <- None
+                                fixture.Runtime.RunError <- None
+                                if retry then
+                                    transact (fun () -> fixture.Size.Value <- V3i(3, 2, 1))
+                                    let texture = fixture.Get(RenderToken.Zero)
+                                    Expect.equal texture.Dimensions (V3i(3, 2, 1)) (context + ": successful retry consumes current target")
+                                    Expect.equal fixture.Runtime.Tasks.Count 1 (context + ": one successful compiled task")
+                                fixture.Result.ReleaseAll()
+                                Expect.equal fixture.Source.Owners (if external then 1 else 0) (context + ": only external reference survives final release")
+                                if external then source.Release()
+                                doneTextures context fixture.Runtime
+
         let plainAndStandalone() =
             for constant in [false; true] do
                 for direct in [false; true] do
@@ -423,13 +496,103 @@ module TraceTo =
                     for task in runtime.Tasks do if task.Disposals = 0 then (task :> IRaytracingTask).Dispose()
                     for texture in runtime.Textures do if texture.Disposals = 0 then (texture :> IBackendTexture).Dispose()
 
+    module private GpuCases =
+        open FShade
+
+        type UniformScope with
+            member x.OutputBuffer : Image2d<Formats.rgba8> = uniform?OutputBuffer
+
+        let private writeTarget (input : RayGenerationInput) =
+            raygen {
+                uniform.OutputBuffer.[input.work.id.XY] <- V4f(1.0f, 0.0f, 0.0f, 1.0f)
+            }
+
+        type private Target(source : aval<IBackendTexture>) =
+            inherit AdaptiveResource<IBackendTexture>()
+            let textures = ResizeArray<Aardvark.Rendering.Vulkan.Image>()
+            let mutable current : Aardvark.Rendering.Vulkan.Image option = None
+            member val Creates = 0 with get, set
+            member val Destroys = 0 with get, set
+            member _.Textures = textures
+            override x.Create() =
+                x.Creates <- x.Creates + 1
+                current <- None
+                source.Acquire()
+            override x.Destroy() =
+                x.Destroys <- x.Destroys + 1
+                try
+                    current |> Option.iter (fun image -> Expect.isTrue image.IsValid "Target stays alive until task cleanup completes")
+                finally
+                    current <- None
+                    source.Release()
+            override _.Compute(token, rt) =
+                let texture = source.GetValue(token, rt)
+                let image = texture :?> Aardvark.Rendering.Vulkan.Image
+                current <- Some image
+                if not (textures |> Seq.exists (fun old -> obj.ReferenceEquals(old, image))) then textures.Add image
+                texture
+
+        let targetLifetime (runtime : IRuntime) =
+            Expect.isTrue runtime.SupportsRaytracing "Raytracing hardware is required for target lifetime verification"
+            for subtype in [false; true] do
+                for all in [false; true] do
+                    for external in [false; true] do
+                        let size = cval (V3i(13, 9, 1))
+                        let source = runtime.CreateTexture(size, TextureDimension.Texture2D, TextureFormat.Rgba8)
+                        let target = Target(source)
+                        let pipeline =
+                            { Effect = raytracingEffect { raygen writeTarget }
+                              Scenes = Map.empty
+                              Uniforms = UniformProvider.ofList [Sym.ofString "OutputBuffer", source :> IAdaptiveValue]
+                              MaxRecursionDepth = AVal.constant 1 }
+                        let result =
+                            if subtype then
+                                let typed = target |> AdaptiveResource.mapNonAdaptive (fun t -> t :?> Aardvark.Rendering.Vulkan.Image)
+                                runtime.TraceTo(typed, pipeline)
+                            else runtime.TraceTo(target :> aval<IBackendTexture>, pipeline)
+                        let context = $"subtype={subtype}, all={all}, external={external}"
+                        try
+                            result.Acquire()
+                            result.ReleaseAll()
+                            Expect.equal (target.Creates, target.Destroys, target.Textures.Count) (1, 1, 0) (context + ": unevaluated lifetime")
+                            for lifetime in 1 .. 2 do
+                                if external then target.Acquire()
+                                result.Acquire()
+                                result.Acquire()
+                                if external then target.Release()
+                                Expect.equal target.Destroys lifetime (context + ": result survives external release before evaluation")
+                                for next in [V3i(13, 9, 1); V3i(7, 5, 1); V3i.One] do
+                                    transact (fun () -> size.Value <- next)
+                                    let texture = result.GetValue(AdaptiveToken.Top)
+                                    Expect.equal texture.Size next (context + ": current target size")
+                                    texture.Download().AsPixImage<uint8>() |> PixImage.isColor [|255uy; 0uy; 0uy; 255uy|]
+                                    Expect.isTrue (obj.ReferenceEquals(texture, result.GetValue(AdaptiveToken.Top))) (context + ": cached identity")
+                                result.Release()
+                                Expect.isTrue target.Textures.[target.Textures.Count - 1].IsValid (context + ": second result owner retains target")
+                                if all then result.ReleaseAll() else result.Release()
+                                Expect.equal target.Creates target.Destroys (context + ": balanced target lifetimes")
+                                for image in target.Textures do
+                                    Expect.equal image.ReferenceCount 0 (context + ": final release retires native references")
+                                    Expect.isTrue image.IsNull (context + ": final release retires native handle")
+                        finally
+                            try result.ReleaseAll()
+                            finally
+                                try target.ReleaseAll()
+                                finally source.ReleaseAll()
+
     let tests (target : TestTarget) =
-        [
-            "Target lifetimes and owner isolation",           Cases.ownerLifetimes
-            "Release before evaluation and repeated lives",   Cases.releaseBeforeEvaluation
-            "Cached reads size changes and render tokens",    Cases.sizesAndTokens
-            "Disposal failures release target references",    Cases.disposalFailures
-            "Plain aval and standalone compilation controls", Cases.plainAndStandalone
-            "Size-created target and pipeline uniforms",      Cases.sizeCreatedUniformTarget
-        ]
-        |> prepareCasesCpu "TraceTo" target
+        if target = TestTarget.Cpu then
+            [
+                "Target lifetimes and owner isolation",           Cases.ownerLifetimes
+                "Release before evaluation and repeated lives",   Cases.releaseBeforeEvaluation
+                "Cached reads size changes and render tokens",    Cases.sizesAndTokens
+                "Disposal failures release target references",    Cases.disposalFailures
+                "Failed acquisition leaves later lives balanced", Cases.acquisitionFailures
+                "Failed evaluations retain ownership and retry",  Cases.evaluationFailures
+                "Plain aval and standalone compilation controls", Cases.plainAndStandalone
+                "Size-created target and pipeline uniforms",      Cases.sizeCreatedUniformTarget
+            ]
+            |> prepareCasesCpu "TraceTo" target
+        else
+            [ "Hardware target lifetime and pixels", GpuCases.targetLifetime ]
+            |> prepareCasesFor "TraceTo" target [TestTarget.Vulkan]
