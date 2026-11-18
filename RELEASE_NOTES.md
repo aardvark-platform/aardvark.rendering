@@ -1,3 +1,6 @@
+### 5.6.14
+- [GL] `LodRendererStats.converged` is now cleared with the input change itself; in 5.6.13 it could stay true for a few milliseconds after a camera change.
+
 ### 5.6.13
 - [GL] Added `LodRendererStats.converged`: true when the last frame showed everything the current inputs ask for. Breaking only for code that constructs the record.
 

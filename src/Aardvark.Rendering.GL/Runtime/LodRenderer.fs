@@ -1808,10 +1808,8 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
         let idle = upstreamIdle()
         let drained = run token maxMem maxTime calls iface
         sync()
-        // an incomplete frame clears `stats.converged` right away, so that reading it after a frame is reliable;
-        // a complete one is published by the prediction thread (a mark from inside this frame could get lost)
+        // published by the prediction thread (a mark from inside this frame could get lost)
         lock converged (fun () -> converged.Value <- idle && drained)
-        if not converged.Value && config.stats.Value.converged then publishConverged()
             
     let inner =
         { new DrawPool(manager.Context, config.alphaToCoverage, true, pRenderBounds, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, config.pass) with
@@ -2079,9 +2077,16 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
         let thread = 
             startThreadSafe "Update" (fun () ->
                 let notConverged = MVar.create () //new ManualResetEventSlim(true)
+                // Runs while the transaction that changed the input commits, and clears `stats.converged` as part of
+                // it: whoever changes an input finds the statistics not converged right after. (This cannot be left
+                // to the next frame, which does not update this renderer when only the camera changed.)
                 let inputChanged () =
                     Interlocked.Increment(&inputVersion.contents) |> ignore
-                    Volatile.Write(&converged.contents, false)
+                    lock converged (fun () ->
+                        converged.Value <- false
+                        let s = config.stats.Value
+                        if s.converged then config.stats.Value <- { s with converged = false }
+                    )
                     MVar.put notConverged ()
 
                 let cancel = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, CancellationTokenSource>()
