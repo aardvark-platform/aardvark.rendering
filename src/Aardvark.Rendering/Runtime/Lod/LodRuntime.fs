@@ -8,6 +8,9 @@ open FSharp.Data.Adaptive
 [<Struct>]
 type LodRendererStats =
     {
+        /// True when the last rendered frame showed everything the current inputs (view, projection, budget, ...) ask
+        /// for: nothing is left to load, upload or activate. False while the renderer is still refining.
+        converged       : bool
         quality         : float
         maxQuality      : float
         totalPrimitives : int64

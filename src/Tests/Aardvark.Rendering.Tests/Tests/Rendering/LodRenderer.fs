@@ -150,6 +150,7 @@ module LodRenderer =
 
                 let stats =
                     {
+                        converged       = false
                         quality         = 1.0
                         maxQuality      = 1.0
                         totalPrimitives = 0L

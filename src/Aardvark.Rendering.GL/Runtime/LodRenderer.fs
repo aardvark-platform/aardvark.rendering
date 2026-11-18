@@ -299,7 +299,16 @@ module LodTreeHelpers =
             splits          : ref<int>
             collapses       : ref<int>
             dataSize        : ref<int64>
+            /// changes the puller has not processed yet: counted when started, subtracted by the puller
+            pending         : ref<int>
+            /// changes the puller may pick up
+            announced       : ref<int>
         }
+
+        member x.Begin() = Interlocked.Increment(&x.pending.contents) |> ignore
+        member x.Announce() =
+            Interlocked.Increment(&x.announced.contents) |> ignore
+            MVar.put x.trigger ()
         
 
         member x.AddNode() = 
@@ -520,6 +529,7 @@ module LodTreeHelpers =
                             o.BuildQueue(n, depth, quality, splitfactor, collapseIfNotSplit, view, proj, queue)
 
         member x.StartSplit(trigger : MVar<unit>) =
+            state.Begin()
             let n = original.Children |> Seq.toList
             let childTasks = System.Collections.Generic.List<Task<_>>()
             children <- n |> List.map (fun n ->
@@ -529,12 +539,13 @@ module LodTreeHelpers =
                 node
             )
 
+            // announced for every outcome, so that a cancelled or failed load does not stay pending
             let childrenReady (t : Task<_>) =
                 if t.IsCompleted && not t.IsFaulted && not t.IsCanceled then
                     state.AddReady()
-                    MVar.put trigger ()
+                state.Announce()
 
-            Task.WhenAll(childTasks).ContinueWith(childrenReady, TaskContinuationOptions.OnlyOnRanToCompletion) |> ignore
+            Task.WhenAll(childTasks).ContinueWith(childrenReady) |> ignore
             
         member x.TotalSize =
             int64 original.DataSize +
@@ -543,7 +554,8 @@ module LodTreeHelpers =
         member x.Collapse(trigger : MVar<unit>) =
             children |> List.iter (fun c -> c.Destroy())
             children <- []
-            MVar.put trigger ()
+            state.Begin()
+            state.Announce()
             
         member x.Original = original
         member x.Children = children
@@ -607,7 +619,8 @@ module LodTreeHelpers =
                 let create () =
                     let n = TaskTreeNode<'a>(state, mapping, t)
                     root <- Some n
-                    n.Task.ContinueWith (fun (t : Task<_>) -> MVar.put state.trigger ()) |> ignore
+                    state.Begin()
+                    n.Task.ContinueWith (fun (t : Task<_>) -> state.Announce()) |> ignore
 
                 queue.HeapEnqueue(cmp, (-1.0, TaskTreeOp.TAdd create))
                 
@@ -1397,6 +1410,29 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
     let needUpdate = AVal.init ()
     let renderDelta : ref<AtomicQueue<ILodTreeNode, GeometryPoolInstance>> = ref AtomicQueue.empty
 
+    // Convergence: a change passes from the update thread (what to load) through the load tasks and the puller
+    // (render operations) to the render thread (applies them). All of them must have nothing left to do.
+    /// incremented whenever an input of the update thread changes (view, projection, budget, roots, ...)
+    let inputVersion = ref 0
+    /// the input version for which the update thread last found nothing left to do
+    let finishedVersion = ref -1
+    /// changes the puller has not processed yet
+    let pending = ref 0
+    /// whether the last frame showed everything; also the lock for publishing it
+    let converged = ref false
+
+    let upstreamIdle () =
+        Volatile.Read(&finishedVersion.contents) = Volatile.Read(&inputVersion.contents) && Volatile.Read(&pending.contents) = 0
+
+    /// brings `stats.converged` in line with the flag (the lock covers the assignment, not the commit)
+    let publishConverged () =
+        transact (fun () ->
+            lock converged (fun () ->
+                let s = config.stats.Value
+                if s.converged <> converged.Value then config.stats.Value <- { s with converged = converged.Value }
+            )
+        )
+
     let pRenderBounds : nativeptr<int> = 
         NativePtr.allocArray [| (if config.renderBounds.GetValue() then 1 else 0) |]
 
@@ -1731,6 +1767,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
                 //Log.line "rerun: %d (%d)" cnt renderDelta.Value.Count
                 config.time.GetValue token |> ignore
+                false
             else
                 let dequeued = 
                     enter renderDelta
@@ -1750,6 +1787,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                         updateTime.Insert(sw.MicroTime.TotalMilliseconds) |> ignore
   
                     //Log.line "done: %d (%d)" cnt renderDelta.Value.Count
+                    true
 
                 | Some ops ->
                     perform state ops
@@ -1766,8 +1804,14 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
         let maxTime = max (MicroTime.FromMilliseconds 1.0) calls.AverageRenderTime
         let maxMem = Mem (3L <<< 30)
-        run token maxMem maxTime calls iface
+        // read before draining: whatever leaves the earlier stages after this is found in the queue
+        let idle = upstreamIdle()
+        let drained = run token maxMem maxTime calls iface
         sync()
+        // an incomplete frame clears `stats.converged` right away, so that reading it after a frame is reliable;
+        // a complete one is published by the prediction thread (a mark from inside this frame could get lost)
+        lock converged (fun () -> converged.Value <- idle && drained)
+        if not converged.Value && config.stats.Value.converged then publishConverged()
             
     let inner =
         { new DrawPool(manager.Context, config.alphaToCoverage, true, pRenderBounds, activeBuffer.Pointer, modelViewProjBuffer.Pointer, state, config.pass) with
@@ -1840,6 +1884,8 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                 splits          = ref 0
                 collapses       = ref 0
                 dataSize        = ref 0L
+                pending         = pending
+                announced       = ref 0
             }
 
         let inline startThreadSafe (name: string) (run: unit -> unit) =
@@ -1866,6 +1912,12 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                     if not (AtomicQueue.isEmpty !renderDelta) && (now - lastTime > flushTime) then
                         lastTime <- now
                         //Log.line "trigger: %A" renderDelta.Value.Count
+                        transact (fun () -> needUpdate.MarkOutdated())
+
+                    if converged.Value <> config.stats.Value.converged then
+                        publishConverged()
+                    elif not converged.Value && upstreamIdle() && AtomicQueue.isEmpty !renderDelta then
+                        // nothing left to do, but no frame has shown it yet
                         transact (fun () -> needUpdate.MarkOutdated())
                             
 
@@ -1921,9 +1973,11 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                     
                 let pickTrees = config.pickTrees
                 let reg = shutdown.Token.Register (System.Action(MVar.put changesPending))
+                let mutable pulled = 0
                 while not shutdown.IsCancellationRequested do
                     timer.Wait()
                     MVar.take changesPending
+                    let announced = Volatile.Read(&state.announced.contents)
                     
                     if not shutdown.IsCancellationRequested then
                         // atomic fetch
@@ -2000,6 +2054,10 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                 )
                             | None ->
                                 ()
+
+                        // everything announced before this pass is in the render queue now
+                        Interlocked.Add(&pending.contents, pulled - announced) |> ignore
+                        pulled <- announced
                     
 
                 for (root,r) in readers do
@@ -2021,6 +2079,10 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
         let thread = 
             startThreadSafe "Update" (fun () ->
                 let notConverged = MVar.create () //new ManualResetEventSlim(true)
+                let inputChanged () =
+                    Interlocked.Increment(&inputVersion.contents) |> ignore
+                    Volatile.Write(&converged.contents, false)
+                    MVar.put notConverged ()
 
                 let cancel = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, CancellationTokenSource>()
                 use timer = new MultimediaTimer.Trigger(10)
@@ -2077,12 +2139,12 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                       
                 let subs =
                     Dict.ofList [
-                        config.view :> IAdaptiveObject, config.view.AddMarkingCallback (MVar.put notConverged)
-                        config.proj :> IAdaptiveObject, config.proj.AddMarkingCallback (MVar.put notConverged)
-                        config.maxSplits :> IAdaptiveObject, config.maxSplits.AddMarkingCallback (MVar.put notConverged)
-                        config.budget :> IAdaptiveObject, config.budget.AddMarkingCallback (MVar.put notConverged)
-                        reader :> IAdaptiveObject, reader.AddMarkingCallback (MVar.put notConverged)
-                        config.splitfactor :> IAdaptiveObject, config.splitfactor.AddMarkingCallback (MVar.put notConverged)
+                        config.view :> IAdaptiveObject, config.view.AddMarkingCallback inputChanged
+                        config.proj :> IAdaptiveObject, config.proj.AddMarkingCallback inputChanged
+                        config.maxSplits :> IAdaptiveObject, config.maxSplits.AddMarkingCallback inputChanged
+                        config.budget :> IAdaptiveObject, config.budget.AddMarkingCallback inputChanged
+                        reader :> IAdaptiveObject, reader.AddMarkingCallback inputChanged
+                        config.splitfactor :> IAdaptiveObject, config.splitfactor.AddMarkingCallback inputChanged
                     ]
 
                 let mutable lastMaxQ = 0.0
@@ -2092,6 +2154,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                     while not shutdown.IsCancellationRequested do
                         timer.Wait()
                         MVar.take notConverged
+                        let inputs = Volatile.Read(&inputVersion.contents)
 
                         if not shutdown.IsCancellationRequested then
                             //caller.EvaluateAlways AdaptiveToken.Top (fun token ->
@@ -2171,7 +2234,8 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                                         | None ->
                                                             Log.error "[Lod] remove of nonexisting root %A" i.root
 
-                                            MVar.put changesPending ()
+                                            state.Begin()
+                                            state.Announce()
                                             roots
                                         )
                                     else
@@ -2180,7 +2244,7 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
 
                                 let modelView (r : ILodTreeNode) =
                                     let t = getRootTrafo r
-                                    subs.GetOrCreate(t, fun t -> t.AddMarkingCallback (MVar.put notConverged)) |> ignore
+                                    subs.GetOrCreate(t, fun t -> t.AddMarkingCallback inputChanged) |> ignore
                                     let m = t.GetValue()
                                     m * view
                                 
@@ -2209,8 +2273,10 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                 expandTime.Insert dt.TotalMilliseconds |> ignore
 
                                 transact (fun () -> 
+                                  lock converged (fun () ->
                                     config.stats.Value <-
                                         {
+                                            converged = fin && converged.Value
                                             quality = lastQ
                                             maxQuality = maxQ
                                             totalPrimitives = !state.dataSize
@@ -2219,7 +2285,9 @@ type LodRenderer(manager : ResourceManager, config : LodRendererConfig, roots : 
                                             allocatedMemory = pool.TotalMemory + inner.TotalMemory 
                                             renderTime = inner.AverageRenderTime 
                                         }
+                                  )
                                 )
+                                Volatile.Write(&finishedVersion.contents, if fin then inputs else -1)
                                 if not fin then MVar.put notConverged ()
 
 

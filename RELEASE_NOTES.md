@@ -1,3 +1,6 @@
+### 5.6.13
+- [GL] Added `LodRendererStats.converged`: true when the last frame showed everything the current inputs ask for. Breaking only for code that constructs the record.
+
 ### 5.6.12
 - Fixed adaptive textures and texture arrays to clean up newly created handles when assigning their debug name fails.
 - Reject negative memory-manager resize sizes before changing allocations, preserving live blocks and neighboring payloads.
