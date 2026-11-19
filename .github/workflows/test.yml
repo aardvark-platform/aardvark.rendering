@@ -52,4 +52,4 @@ jobs:
       run: ${{ matrix.run-build }}
 
     - name: Test
-      run: dotnet run -c Release --no-build --project ./src/Tests/Aardvark.Rendering.Tests/Aardvark.Rendering.Tests.fsproj --cpu-only
+      run: dotnet run -c Release --no-build --project ./src/Tests/Aardvark.Rendering.Tests/Aardvark.Rendering.Tests.fsproj --target=cpu

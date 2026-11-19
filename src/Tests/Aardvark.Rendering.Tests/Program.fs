@@ -1,5 +1,7 @@
 ﻿open Aardvark.Rendering.Tests
+open Aardvark.Base
 open Expecto
+open Microsoft.FSharp.Reflection
 
 let tests (targets: TestTarget list) =
     let testAllTargets  =
@@ -103,30 +105,135 @@ let allTests = tests []
 
 [<EntryPoint>]
 let main argv =
-    let switches =
-        Map.ofList [
-            "cpu-only",     "Only run CPU tests."
-            "stop-on-fail", "Stop as soon as a test fails."
-            "help",         "Show this help text."
+    let targets =
+        FSharpType.GetUnionCases typeof<TestTarget>
+        |> Array.map (fun case ->
+            let value = FSharpValue.MakeUnion(case, [||]) :?> TestTarget
+            case.Name.ToLowerInvariant(), value
+        )
+        |> List.ofArray
+
+    let options =
+        let targets = targets |> List.map fst |> String.concat ", "
+
+        [
+            "target",       ("<target>", $"Run test target. <target> may be {targets}.")
+            "filter",       ("<string>", "Only run tests whose full name (Group.Target.Test...) contains <string>.")
+            "exclude",      ("<string>", "Do not run tests whose full name contains <string>.")
+            "test",         ("<name>",   "Only run the test with the given full name.")
+            "stop-on-fail", (null,       "Stop as soon as a test fails.")
+            "list",         (null,       "List the names of the selected tests without running them.")
+            "help",         (null,       "Show this help text.")
         ]
 
+    let switches = options |> List.choose (fun (n, (a, _)) -> if a = null then Some n else None)
+    let arguments = options |> List.choose (fun (n, (a, _)) -> if a <> null then Some n else None)
+
     let switch name =
-        switches.ContainsKey name && argv |> Array.contains $"--{name}"
+        switches |> List.contains name && argv |> Array.contains $"--{name}"
+
+    let withoutPrefix (prefix: string) (str: string) =
+        if str.StartsWith(prefix, System.StringComparison.Ordinal) then
+            Some <| str.Substring prefix.Length
+        else
+            None
+
+    let argument name =
+        if arguments |> List.contains name then
+            argv |> Array.choose (withoutPrefix $"--{name}=") |> List.ofArray
+        else
+            []
+
+    let unknownArgs =
+        argv |> Array.filter (fun arg ->
+            let isSwitch = switches |> List.exists (fun n -> arg = $"--{n}")
+            let isArgument = arguments |> List.exists (fun n -> arg.StartsWith($"--{n}=", System.StringComparison.Ordinal))
+            not (isSwitch || isArgument)
+        )
+
+    let error (message: string) =
+        eprintfn $"Error: {message}"
+        eprintfn "Use --help to show the available options."
+        1
 
     if switch "help" then
+        let options =
+            options |> List.map (fun (name, (arg, desc)) ->
+                let name = if arg = null then name else $"{name}={arg}"
+                name, desc
+            )
+
         printfn "Run tests"
         printfn ""
         printfn "OPTIONS"
-        let n = switches.Keys |> Seq.map _.Length |> Seq.max
-        for KeyValue(name, desc) in switches do
-            printfn $"    --{name.PadRight n}    {desc}"
-        0
-    else
-        let tests =
-            if switch "cpu-only" then
-                tests [TestTarget.Cpu]
-            else
-                allTests
+        let n = options |> List.map (fst >> _.Length) |> List.max
+        for name, desc in options do
+            let desc = desc |> String.getLines
+            let prefix = $"    --{name.PadRight n}    "
+            printfn $"{prefix}{desc.[0]}"
+            let prefix = String.replicate prefix.Length " "
+            for i = 1 to desc.Length - 1 do
+                printfn $"{prefix}{desc.[i]}"
 
-        let stopOnFail = switch "stop-on-fail"
-        runTestsSynchronously stopOnFail tests
+        printfn ""
+        printfn "Options with values can be repeated and must be passed as --<name>=<value>."
+        printfn "A test is run if it matches any --filter or --test (or neither is given) and no --exclude."
+        printfn "Matching of targets and test names is case-insensitive."
+        0
+
+    elif unknownArgs.Length > 0 then
+        let args = unknownArgs |> Array.map (sprintf "'%s'") |> String.concat ", "
+        error $"Unknown argument(s): {args}. Arguments with values must be passed as --<name>=<value>."
+
+    else
+        let selectedTargets =
+            let targets = targets |> Map.ofList
+            argument "target" |> List.map (fun t -> t, Map.tryFind (t.ToLowerInvariant()) targets)
+
+        let invalidTargets =
+            selectedTargets |> List.choose (fun (t, v) -> if v.IsNone then Some $"'{t}'" else None)
+
+        if not invalidTargets.IsEmpty then
+            let invalid = invalidTargets |> String.concat ", "
+            let valid = targets |> List.map fst |> String.concat ", "
+            error $"Unknown target(s): {invalid}. Valid targets: {valid}."
+
+        else
+            let filter =
+                let ignoreCase = System.StringComparison.OrdinalIgnoreCase
+                let contains (pattern: string) (name: string) = name.Contains(pattern, ignoreCase)
+                let equals (pattern: string) (name: string) = name.Equals(pattern, ignoreCase)
+
+                let selected =
+                    (argument "filter" |> List.map contains) @
+                    (argument "test" |> List.map equals)
+
+                let excluded =
+                    argument "exclude" |> List.map contains
+
+                fun (name: string) ->
+                    (selected.IsEmpty || selected |> List.exists (fun f -> f name)) &&
+                    excluded |> List.forall (fun f -> not <| f name)
+
+            let tests =
+                match selectedTargets |> List.choose snd |> List.distinct with
+                | [] -> allTests
+                | targets -> tests targets
+                |> Test.filter "." (String.concat "." >> filter)
+
+            if switch "list" then
+                let tests = Test.toTestCodeList tests
+                for t in tests do
+                    printfn "%s" (t.fullName ".")
+                printfn ""
+                printfn $"Total: {tests.Length}"
+                0
+
+            elif List.isEmpty (Test.toTestCodeList tests) then
+                eprintfn "Error: No tests match the given --target, --filter, --test, and --exclude options."
+                eprintfn "Use --list to check the selection."
+                1
+
+            else
+                let stopOnFail = switch "stop-on-fail"
+                runTestsSynchronously stopOnFail tests

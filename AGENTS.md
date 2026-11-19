@@ -11,6 +11,7 @@ Primary entry point for AI agents working with Aardvark.Rendering.
 | Build (Linux/macOS) | `./build.sh` | Builds src/Aardvark.Rendering.NonWindows.slnf |
 | Build single project | `dotnet build src/ProjectName/ProjectName.fsproj` | Single project |
 | Test | `dotnet test src/Tests/Aardvark.Rendering.Tests/Aardvark.Rendering.Tests.fsproj` | Read `ai/TESTING.md` before changing tests |
+| Test subset | `dotnet run --project src/Tests/Aardvark.Rendering.Tests -- --target=cpu --filter=Buffers` | Custom runner, sequential on the main thread; also `--exclude`, `--test`, `--list`, `--help`. See `ai/TESTING.md` |
 | Verify | `.\build.cmd && dotnet test src/Tests/Aardvark.Rendering.Tests/Aardvark.Rendering.Tests.fsproj` | Build + test |
 | Build GLVM | `src/GLVM/build.cmd` (Win) / `src/GLVM/build.sh` (Unix) | Native OpenGL wrapper |
 | Build VKVM | `src/VKVM/build.cmd` (Win) / `src/VKVM/build.sh` (Unix) | Native Vulkan wrapper |

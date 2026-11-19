@@ -163,3 +163,39 @@ dotnet test src/Tests/Aardvark.Rendering.Tests/Aardvark.Rendering.Tests.fsproj
 Also build with `./build.sh` on Linux/macOS or `build.cmd` on Windows. Before publishing,
 confirm the affected targets pass and that discovered names match the intended consolidated
 case structure.
+
+## Running a subset of tests
+
+Besides `dotnet test`, the test project has its own runner in `Program.fs`. It runs tests
+one after another on the current thread and prints a summary of passed, failed, and
+skipped tests. Pass options after `--` (required for `--help`, which `dotnet run` would
+otherwise handle itself):
+
+```sh
+dotnet run --project src/Tests/Aardvark.Rendering.Tests -- --target=cpu --filter=Buffers
+```
+
+| Option | Meaning |
+|--------|---------|
+| `--target=<target>` | Run only these targets: `cpu`, `gl`, `glfw`, `opentk`, `vulkan`. Leave it out to run every target. |
+| `--filter=<string>` | Only run tests whose full name `<category>.<target>.<group>.<case>` contains `<string>`. |
+| `--exclude=<string>` | Do not run tests whose full name contains `<string>`. |
+| `--test=<name>` | Only run the test with exactly this full name. |
+| `--stop-on-fail` | Stop at the first failing test. |
+| `--list` | Print the full names of the selected tests and their count without running them. Use it to check a selection before a run. |
+| `--help` | Print the options. |
+
+Options with values can be repeated. A test runs if it matches at least one `--filter`
+or `--test` (or neither is given) and no `--exclude`. `--filter`, `--exclude`, and
+`--test` ignore case, and so does `--target`:
+
+```sh
+# Texture tests on GL and Vulkan, without the compression cases
+dotnet run --project src/Tests/Aardvark.Rendering.Tests -- --target=gl --target=vulkan --filter=Textures --exclude=Compression
+```
+
+Arguments that take a value must use the `--name=value` form. Quote values that contain
+spaces, e.g. `"--test=Buffers.GL.Download.Array uint8"`. The runner exits with an error
+when it gets an unknown argument or target, or when the options select no tests (`--list`
+still prints an empty list). It returns 0 when every test passed and 1
+when any test failed.

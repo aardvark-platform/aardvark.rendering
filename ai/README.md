@@ -64,6 +64,7 @@ Index for AI coding assistants. Read only the doc you need.
 - Choosing CPU, GPU, mixed, and framework targets -> TESTING.md
 - `prepareCases*`, `TestTarget`, and `testAllTargets` -> TESTING.md
 - Test modules, names, parameter matrices, and registration -> TESTING.md
+- Running a subset of tests (`--target`, `--filter`, `--exclude`, `--test`) -> TESTING.md
 
 ### Consumer Integration
 - Application initialization patterns -> CONSUMER-PATTERNS.md
