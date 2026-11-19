@@ -153,7 +153,7 @@ module AirState =
 
 type private AirAttributeProvider(local : Map<Symbol, BufferView>, inh : IAttributeProvider) =
     interface IAttributeProvider with
-        member x.All = Seq.empty
+        member x.All = Seq.append (Map.toSeq local) inh.All |> Seq.distinctBy fst
         member x.TryGetAttribute(sem) =
             match Map.tryFindV sem local with
             | ValueSome v -> ValueSome v
