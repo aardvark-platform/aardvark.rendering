@@ -116,14 +116,15 @@ type MutableComputeInputBinding internal(shader : IComputeShader) =
                 pending.[name] <- wrapped
             )
 
+    /// Applies queued values. Assignments queued by transaction callbacks remain pending for the next Flush.
     member x.Flush() =
         lock x (fun _ ->
             if pending.Count > 0 then
                 transact (fun _ ->
                     for KeyValue(name, value) in pending do
                         cvals.[name] |> AVal.change value
+                    pending.Clear()
                 )
-                pending.Clear()
         )
 
     member x.Dispose() =
