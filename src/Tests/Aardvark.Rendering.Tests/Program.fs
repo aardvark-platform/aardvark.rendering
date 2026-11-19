@@ -94,6 +94,7 @@ let tests (targets: TestTarget list) =
             Other.Input.tests
             Other.ContextCreation.tests
             Other.VulkanWrapper.tests
+            Other.DeviceDisposal.tests
             Other.IDictionaryStructuralComparer.tests
         ]
     ]
