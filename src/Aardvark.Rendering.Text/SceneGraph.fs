@@ -18,9 +18,27 @@ module Sg =
     open Aardvark.Base.Ag
 
 
-    type ShapeSet (content : aset<aval<Trafo3d> * aval<ShapeList>>) =
+    /// Shape lists at their trafos, drawn in one render object. `members` makes a reader of the members in drawing
+    /// order, which pulls the content's changes; a set's own order is its hash order.
+    type ShapeSet internal (content : aset<aval<Trafo3d> * aval<ShapeList>>,
+                            members : unit -> (AdaptiveToken -> (aval<Trafo3d> * aval<ShapeList>)[])) =
+        new (content : aset<aval<Trafo3d> * aval<ShapeList>>) =
+            ShapeSet(content, fun () ->
+                let reader = content.GetReader()
+                fun token -> reader.GetChanges token |> ignore; CountingHashSet.toArray reader.State
+            )
         interface ISg
         member x.Content = content
+        member internal x.Members() = members ()
+
+    /// A shape set whose members draw in list order: where they overlap, later members cover earlier ones. A ShapeSet
+    /// draws in hash order, which differs from process to process.
+    type OrderedShapeSet (content : alist<aval<Trafo3d> * aval<ShapeList>>) =
+        inherit ShapeSet(AList.toASet content, fun () ->
+            let reader = content.GetReader()
+            fun token -> reader.GetChanges token |> ignore; IndexList.toArray reader.State
+        )
+        member x.OrderedContent = content
 
 
     type Shape (renderBoundary : bool, boundaryColor : C4b, boundaryExtent : Border2d, content : aval<ShapeList>) =
@@ -73,16 +91,14 @@ module Sg =
             AVal.constant Box3d.Invalid
 
         member x.RenderObjects(t : ShapeSet, scope : Ag.Scope) : aset<IRenderObject> =
-            let content = t.Content
             let cache = ShapeCache.GetOrCreateCache(scope.Runtime)
             let shapes = RenderObject.ofScope scope
 
-            let reader = content.GetReader()
+            let members = t.Members()
 
             let trafosAndShapes =
                 AVal.custom (fun token ->
-                    reader.GetChanges token |> ignore
-                    reader.State |> CountingHashSet.toArray |> Array.map (fun (trafo,shapes) ->
+                    members token |> Array.map (fun (trafo,shapes) ->
                         let trafo = trafo.GetValue token
                         let shapes = shapes.GetValue token
                         trafo, shapes
@@ -91,8 +107,7 @@ module Sg =
 
             let shapesOnly =
                 AVal.custom (fun token ->
-                    reader.GetChanges token |> ignore
-                    reader.State |> CountingHashSet.toArray |> Array.map (fun (trafo,shapes) ->
+                    members token |> Array.map (fun (trafo,shapes) ->
                         shapes.GetValue token
                     )
                 )
@@ -527,6 +542,10 @@ module Sg =
 
     let shapes (content : aset<aval<Trafo3d> * aval<ShapeList>>) =
         ShapeSet(content) :> ISg
+
+    /// The shape lists at their trafos, drawn in list order: where they overlap, later members cover earlier ones.
+    let shapesOrdered (content : alist<aval<Trafo3d> * aval<ShapeList>>) =
+        OrderedShapeSet(content) :> ISg
 
     let textWithConfig (cfg : TextConfig) (content : aval<string>) =
         content
