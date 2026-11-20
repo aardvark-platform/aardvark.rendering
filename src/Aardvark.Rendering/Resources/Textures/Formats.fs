@@ -240,6 +240,7 @@ module TextureFormat =
             PixFormat.ByteRGBA , rgba8
             PixFormat.ByteRGBP , rgba8
             PixFormat.ByteGray , (fun _ -> TextureFormat.R8)
+            PixFormat(typeof<byte>, Col.Format.RG), (fun _ -> TextureFormat.Rg8)
 
             PixFormat.UShortRGB  ,  (fun _ -> TextureFormat.Rgb16)
             PixFormat.UShortRGBA ,  (fun _ -> TextureFormat.Rgba16)
@@ -248,6 +249,7 @@ module TextureFormat =
             PixFormat.UShortBGRA ,  (fun _ -> TextureFormat.Rgba16)
             PixFormat.UShortBGRP ,  (fun _ -> TextureFormat.Rgba16)
             PixFormat.UShortGray ,  (fun _ -> TextureFormat.R16)
+            PixFormat(typeof<uint16>, Col.Format.RG), (fun _ -> TextureFormat.Rg16)
 
             PixFormat(typeof<float16>, Col.Format.Gray)     , (fun _ -> TextureFormat.R16f)
             PixFormat(typeof<float16>, Col.Format.RG)       , (fun _ -> TextureFormat.Rg16f)

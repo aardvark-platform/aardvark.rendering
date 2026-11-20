@@ -62,11 +62,47 @@ module TextureDownload =
                 member _.Dispose() = disposed <- disposed + 1
 
         let mappings _ =
+            let errors = ResizeArray<string>()
             for format, expected in formats do
-                let actual = TextureFormat.toDownloadFormat format
-                Expect.equal actual.Type expected.Type $"{format}: element type"
-                Expect.equal actual.Format expected.Format $"{format}: channel semantics"
-                Expect.equal actual.ChannelCount expected.ChannelCount $"{format}: channel count"
+                try
+                    let actual = TextureFormat.toDownloadFormat format
+                    Expect.equal actual.Type expected.Type $"{format}: element type"
+                    Expect.equal actual.Format expected.Format $"{format}: channel semantics"
+                    Expect.equal actual.ChannelCount expected.ChannelCount $"{format}: channel count"
+                with error -> errors.Add $"{format}: {error.Message}"
+            Expect.isTrue (errors.Count = 0) (String.concat "\n" errors)
+
+        let selection _ =
+            let mappings =
+                [ PixFormat(typeof<byte>, Col.Format.RG), TextureFormat.Rg8, TextureFormat.Rg8
+                  PixFormat(typeof<uint16>, Col.Format.RG), TextureFormat.Rg16, TextureFormat.Rg16
+                  PixFormat.ByteGray, TextureFormat.R8, TextureFormat.R8
+                  PixFormat.ByteRGB, TextureFormat.Rgb8, TextureFormat.Srgb8
+                  PixFormat.ByteRGBA, TextureFormat.Rgba8, TextureFormat.Srgb8Alpha8
+                  PixFormat.UShortGray, TextureFormat.R16, TextureFormat.R16
+                  PixFormat.UShortRGB, TextureFormat.Rgb16, TextureFormat.Rgb16
+                  PixFormat.UShortRGBA, TextureFormat.Rgba16, TextureFormat.Rgba16
+                  PixFormat(typeof<int8>, Col.Format.RG), TextureFormat.Rg8Snorm, TextureFormat.Rg8Snorm
+                  PixFormat(typeof<int16>, Col.Format.RG), TextureFormat.Rg16Snorm, TextureFormat.Rg16Snorm
+                  PixFormat(typeof<float16>, Col.Format.RG), TextureFormat.Rg16f, TextureFormat.Rg16f
+                  PixFormat(typeof<float32>, Col.Format.RG), TextureFormat.Rg32f, TextureFormat.Rg32f ]
+            let errors = ResizeArray<string>()
+            for pixFormat, linear, srgb in mappings do
+                for bits in 0 .. 7 do
+                    let flags = enum<TextureParams> bits
+                    let expected = if flags.HasPreferSrgb then srgb else linear
+                    let context = $"{pixFormat}, flags={flags}"
+                    try
+                        let actual = TextureFormat.ofPixFormat pixFormat flags
+                        Expect.equal actual expected (context + ": texture format")
+                        Expect.equal (TextureFormat.toDownloadFormat actual) pixFormat (context + ": default download format")
+                        if actual = TextureFormat.Rg8 || actual = TextureFormat.Rg16 then
+                            Expect.isFalse (TextureFormat.isIntegerFormat actual) (context + ": normalized rather than integer")
+                            Expect.isFalse (TextureFormat.isSigned actual) (context + ": unsigned")
+                            Expect.isFalse (TextureFormat.isCompressed actual) (context + ": compression is selected by the upload path")
+                            Expect.equal (TextureFormat.toAspect actual) TextureAspect.Color (context + ": color aspect")
+                    with error -> errors.Add $"{context}: {error.Message}"
+            Expect.isTrue (errors.Count = 0) (String.concat "\n" errors)
 
         let delegation _ =
             let runtime = System.Reflection.DispatchProxy.Create<ITextureRuntime, RecordingRuntime>()
@@ -132,6 +168,32 @@ module TextureDownload =
         let normalizedRGWhole (runtime : IRuntime) =
             normalizedWhole<byte> runtime TextureFormat.Rg8 byte 256
             normalizedWhole<uint16> runtime TextureFormat.Rg16 uint16 65536
+
+        let private normalizedPrepared<'T when 'T : equality> (errors : ResizeArray<string>) (runtime : IRuntime) format convert modulus =
+            let image = normalizedImage<'T> convert modulus (V2i(17, 11)) 0 0
+            image.Volume.[0L, 0L, 0L] <- convert (modulus - 1)
+            image.Volume.[0L, 0L, 1L] <- convert 0
+            image.Volume.[1L, 0L, 0L] <- convert 0
+            image.Volume.[1L, 0L, 1L] <- convert (modulus - 1)
+            for flags in [TextureParams.None; TextureParams.PreferSrgb;
+                          TextureParams.WantMipMaps; TextureParams.WantMipMaps ||| TextureParams.PreferSrgb] do
+                let context = $"{format}, flags={flags}"
+                try
+                    use texture = runtime.PrepareTexture(PixTexture2d(image, flags))
+                    Expect.equal texture.Format format (context + ": linear normalized texture format")
+                    Expect.equal texture.Size image.Size.XYI (context + ": texture size")
+                    Expect.equal texture.Dimension TextureDimension.Texture2D (context + ": texture dimension")
+                    Expect.equal texture.Count 1 (context + ": non-array texture")
+                    Expect.equal texture.MipMapLevels (if flags.HasWantMipMaps then Fun.MipmapLevels image.Size else 1) (context + ": mipmap flag")
+                    compareNormalized (context + ", runtime default download") image (runtime.Download(texture))
+                    compareNormalized (context + ", texture default download") image (texture.Download())
+                with error -> errors.Add $"{context}: {error}"
+
+        let normalizedRGPrepared (runtime : IRuntime) =
+            let errors = ResizeArray<string>()
+            normalizedPrepared<byte> errors runtime TextureFormat.Rg8 byte 256
+            normalizedPrepared<uint16> errors runtime TextureFormat.Rg16 uint16 65536
+            Expect.isTrue (errors.Count = 0) (String.concat "\n" errors)
 
         let private normalizedSubresources<'T when 'T : equality> (runtime : IRuntime) format convert modulus =
             let size = V2i(32, 24)
@@ -658,11 +720,13 @@ module TextureDownload =
     let tests (target: TestTarget) =
         [
             if target = TestTarget.Cpu then
-                "Default format mappings",     DefaultDownload.mappings
-                "Default download delegation", DefaultDownload.delegation
+                "Default format mappings",      DefaultDownload.mappings
+                "Pixel format selection flags", DefaultDownload.selection
+                "Default download delegation",  DefaultDownload.delegation
 
             if target.IsGpu then
                 "Normalized RG whole images",                  Cases.normalizedRGWhole
+                "Prepared normalized RG images",               Cases.normalizedRGPrepared
                 "Normalized RG selected mip slice and region", Cases.normalizedRGSubresources
 
                 "2D r8",                  Cases.texture2Dr8

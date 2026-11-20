@@ -1,4 +1,4 @@
-- Added default downloads for normalized Rg8 and Rg16 textures as two-channel byte and uint16 images.
+- Added preparation and default downloads for two-channel byte and uint16 RG images as normalized Rg8 and Rg16 textures; these formats remain linear when sRGB is preferred.
 - [VR] Update to Unofficial.OpenVR 2.0.0
 
 ### 5.6.11
