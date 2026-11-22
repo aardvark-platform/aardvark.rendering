@@ -43,6 +43,9 @@ module private IndexHelpers =
             unbox<'T -> int -> 'T> f
 
     let createIndex (indexType: Type) (count: int) =
+        if count > 65536 && (indexType = typeof<int16> || indexType = typeof<uint16>) then
+            raise <| ArgumentException($"Cannot generate {count} indices with 16-bit storage; at most 65536 are supported.")
+
         let arr = Array.CreateInstance(indexType, count)
         arr.Visit { new ArrayVisitor<Array>() with
             member x.Run(data: 'T[]) =
@@ -59,8 +62,17 @@ module private IndexHelpers =
             index.Visit { new ArrayVisitor<Array>() with
                 member x.Run(data: 'T[]) =
                     let addInt = addIntOp<'T>
-                    for i = startAt to data.Length - 1 do
-                        data.[i] <- addInt data.[i] offset
+                    if typeof<'T> = typeof<int16> || typeof<'T> = typeof<uint16> then
+                        let toInt = toIntConverter<'T>
+                        let conv = ofIntConverter<'T>
+                        for i = startAt to data.Length - 1 do
+                            let shifted = int64 (toInt data.[i] &&& 0xFFFF) + int64 offset
+                            if shifted < 0L || shifted > 65535L then
+                                raise <| ArgumentException($"Shifted index {shifted} is outside the 16-bit range (0 to 65535).")
+                            data.[i] <- conv (int shifted)
+                    else
+                        for i = startAt to data.Length - 1 do
+                            data.[i] <- addInt data.[i] offset
                     index
             }
 
@@ -336,6 +348,8 @@ type IndexedGeometry =
 
         /// Returns an indexed copy of the geometry.
         /// If it is already indexed, it is returned unmodified.
+        /// Generating Int16 or UInt16 indices supports at most 65536 vertices.
+        /// <exception cref="ArgumentException">if generated indices do not fit the requested 16-bit storage type.</exception>
         member x.ToIndexed(indexType: Type) =
             if isNull x.IndexArray then
                 let copy = x.Clone()
@@ -411,6 +425,8 @@ type IndexedGeometry =
         /// The geometries must have the same attributes and primitive topology.
         /// Paired non-null per-vertex attributes concatenate only each geometry's VertexCount-length
         /// prefix, ignoring extra trailing entries. Source arrays and dictionaries remain unchanged.
+        /// Int16 indices are shifted as unsigned 16-bit bit patterns; 16-bit results must fit 0 to 65535.
+        /// <exception cref="ArgumentException">if generated or shifted indices do not fit the 16-bit storage type.</exception>
         member x.Union(y : IndexedGeometry) =
             if x.Mode <> y.Mode then
                 raise <| ArgumentException("IndexedGeometryMode must match.")

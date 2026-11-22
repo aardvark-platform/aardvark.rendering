@@ -301,6 +301,163 @@ module Operations =
                 let accepted = [IndexedGeometryMode.PointList; IndexedGeometryMode.LineList; IndexedGeometryMode.TriangleList; IndexedGeometryMode.QuadList]
                 argument $"unsupported {mode}" $"IndexedGeometryMode must be one of {accepted}." (fun () -> left.Union right |> ignore)
 
+    module private IndexRepresentability =
+
+        let private shortTypes = [typeof<int16>; typeof<uint16>]
+
+        let private indices (indexType : Type) (values : int[]) : Array =
+            if indexType = typeof<int16> then Array.map int16 values :> Array
+            elif indexType = typeof<uint16> then Array.map uint16 values :> Array
+            elif indexType = typeof<int32> then Array.copy values :> Array
+            else Array.map uint32 values :> Array
+
+        let private values (array : Array) =
+            match array with
+            | :? (int16[]) as data -> data |> Array.map (fun v -> int (uint16 v))
+            | :? (uint16[]) as data -> data |> Array.map int
+            | :? (int32[]) as data -> Array.copy data
+            | :? (uint32[]) as data -> data |> Array.map int
+            | _ -> failtestf "Unexpected index array %A" (array.GetType())
+
+        let private create count (index : Array) =
+            let attributes = SymbolDict<Array>()
+            attributes.[DefaultSemantic.Positions] <- Array.init count (fun i -> byte (i % 251))
+            let singles = SymbolDict<obj>()
+            singles.[DefaultSemantic.Material] <- "index bounds"
+            IndexedGeometry(IndexedGeometryMode.PointList, index, attributes, singles)
+
+        let private snapshot context (source : IndexedGeometry) =
+            let mode, index = source.Mode, source.IndexArray
+            let originalIndex = if isNull index then null else index.Clone() :?> Array
+            let attributes, singles = source.IndexedAttributes, source.SingleAttributes
+            let positions = attributes.[DefaultSemantic.Positions] :?> byte[]
+            let originalPositions = Array.copy positions
+            fun () ->
+                Expect.equal source.Mode mode (context + ": source topology")
+                Expect.isTrue (obj.ReferenceEquals(source.IndexArray, index)) (context + ": source index identity")
+                Expect.equal source.IndexArray originalIndex (context + ": source index contents")
+                Expect.isTrue (obj.ReferenceEquals(source.IndexedAttributes, attributes)) (context + ": source attribute dictionary")
+                Expect.equal attributes.Count 1 (context + ": source attribute keys")
+                Expect.isTrue (obj.ReferenceEquals(attributes.[DefaultSemantic.Positions], positions)) (context + ": source positions identity")
+                Expect.equal positions originalPositions (context + ": source positions contents")
+                Expect.isTrue (obj.ReferenceEquals(source.SingleAttributes, singles)) (context + ": source single dictionary")
+                Expect.equal singles.Count 1 (context + ": source single keys")
+                Expect.equal singles.[DefaultSemantic.Material] (box "index bounds") (context + ": source single value")
+
+        let private reject (errors : ResizeArray<string>) context action =
+            try
+                let result : IndexedGeometry = action()
+                let actual = if result.IndexArray.Length = 0 then "empty" else string (Array.last (values result.IndexArray))
+                errors.Add $"{context}: expected ArgumentException, got a result ending in index {actual}"
+            with
+            | :? ArgumentException as error ->
+                Expect.isTrue (error.GetType() = typeof<ArgumentException>) (context + ": exact exception type")
+                Expect.stringContains error.Message "16-bit" (context + ": useful storage diagnostic")
+            | error -> errors.Add $"{context}: wrong exception {error}"
+
+        let generationBoundaries() =
+            let errors = ResizeArray<string>()
+            for indexType in shortTypes do
+                for count in [0; 1; 32767; 32768; 32769; 65535; 65536; 65537; 65539] do
+                    let context = $"{indexType.Name}, generation count={count}"
+                    let source = create count null
+                    let check = snapshot context source
+                    if count > 65536 then
+                        reject errors context (fun () -> source.ToIndexed indexType)
+                    else
+                        let result = source.ToIndexed indexType
+                        Expect.equal (result.IndexArray.GetType().GetElementType()) indexType (context + ": requested storage type")
+                        Expect.equal (values result.IndexArray) (Array.init count id) (context + ": every index including high bits")
+                        Expect.isTrue (obj.ReferenceEquals(result.IndexedAttributes.[DefaultSemantic.Positions], source.IndexedAttributes.[DefaultSemantic.Positions])) (context + ": shallow attributes")
+                        Expect.equal result.Mode source.Mode (context + ": topology")
+                        Expect.isFalse (obj.ReferenceEquals(source, result)) (context + ": new indexed geometry")
+                    check()
+            Expect.isTrue (errors.Count = 0) (String.concat "\n" errors)
+
+        let unionOverflow() =
+            let errors = ResizeArray<string>()
+            let cases = [65535, 2, [|0; 1|]; 65536, 1, [|0|]; 1, 65536, [|0; 65535|];
+                         65537, 1, [|0|]; 1, 65537, [|0; 65535|]]
+            for indexType in shortTypes do
+                for leftIndexed, rightIndexed in [true, true; false, true; true, false] do
+                    for leftCount, rightCount, rightValues in cases do
+                        let context = $"{indexType.Name}, counts={leftCount}/{rightCount}, indexed={leftIndexed}/{rightIndexed}"
+                        let left = create leftCount (if leftIndexed then indices indexType [|0|] else null)
+                        let right = create rightCount (if rightIndexed then indices indexType rightValues else null)
+                        let checkLeft, checkRight = snapshot context left, snapshot context right
+                        reject errors context (fun () -> left.Union right)
+                        checkLeft(); checkRight()
+            Expect.isTrue (errors.Count = 0) (String.concat "\n" errors)
+
+        let private verifyUnion context indexType (left : IndexedGeometry) (right : IndexedGeometry) =
+            let sourceValues (g : IndexedGeometry) =
+                if g.IsIndexed then values g.IndexArray else Array.init g.VertexCount id
+            let expected = Array.append (sourceValues left) (sourceValues right |> Array.map ((+) left.VertexCount))
+            let checkLeft, checkRight = snapshot context left, snapshot context right
+            let result = left.Union right
+            Expect.equal (result.IndexArray.GetType().GetElementType()) indexType (context + ": output storage type")
+            Expect.equal (values result.IndexArray) expected (context + ": unsigned shifted values")
+            Expect.equal result.VertexCount (left.VertexCount + right.VertexCount) (context + ": vertex count")
+            Expect.equal result.FaceVertexCount expected.Length (context + ": index count")
+            Expect.equal result.Mode left.Mode (context + ": topology")
+            let expectedPositions = Array.append (left.IndexedAttributes.[DefaultSemantic.Positions] :?> byte[]) (right.IndexedAttributes.[DefaultSemantic.Positions] :?> byte[])
+            Expect.equal (result.IndexedAttributes.[DefaultSemantic.Positions] :?> byte[]) expectedPositions (context + ": concatenated attributes")
+            Expect.isFalse (obj.ReferenceEquals(result.IndexArray, left.IndexArray)) (context + ": independent left indices")
+            Expect.isFalse (obj.ReferenceEquals(result.IndexArray, right.IndexArray)) (context + ": independent right indices")
+            checkLeft(); checkRight()
+
+        let representableUnions() =
+            for indexType in shortTypes do
+                for leftIndexed, rightIndexed in [true, true; false, true; true, false] do
+                    for leftCount, rightCount in [1, 32767; 1, 32768; 32768, 32768; 65535, 1; 65536, 0; 0, 65536] do
+                        let context = $"{indexType.Name}, valid counts={leftCount}/{rightCount}, indexed={leftIndexed}/{rightIndexed}"
+                        let select count = if count = 0 then [||] else [|0; count - 1; 0|]
+                        let left = create leftCount (if leftIndexed then indices indexType (select leftCount) else null)
+                        let right = create rightCount (if rightIndexed then indices indexType (select rightCount) else null)
+                        verifyUnion context indexType left right
+                // Only referenced shifted values need to fit, not the union's total vertex count.
+                for leftIndexed in [false; true] do
+                    for rightCount, rightValues in [7, [||]; 65536, [|0; 32767; 32768; 65534|]] do
+                        let leftCount = if rightValues.Length = 0 then 65536 else 1
+                        let context = $"{indexType.Name}, sparse counts={leftCount}/{rightCount}, left indexed={leftIndexed}"
+                        let left = create leftCount (if leftIndexed then indices indexType [|0; leftCount - 1|] else null)
+                        let right = create rightCount (indices indexType rightValues)
+                        verifyUnion context indexType left right
+
+        let emptyAndWideControls() =
+            for indexType in shortTypes @ [typeof<int32>; typeof<uint32>] do
+                for leftIndexed, rightIndexed in [true, true; false, true; true, false] do
+                    for leftCount, rightCount in [0, 0; 0, 3; 3, 0] do
+                        let context = $"{indexType.Name}, empty counts={leftCount}/{rightCount}, indexed={leftIndexed}/{rightIndexed}"
+                        let left = create leftCount (if leftIndexed then indices indexType (Array.init leftCount id) else null)
+                        let right = create rightCount (if rightIndexed then indices indexType (Array.init rightCount id) else null)
+                        verifyUnion context indexType left right
+                let indexed = create 65537 (indices indexType [|0|])
+                for requested in [typeof<int16>; typeof<uint16>; typeof<int32>; typeof<byte>] do
+                    Expect.isTrue (obj.ReferenceEquals(indexed.ToIndexed requested, indexed)) $"{indexType.Name}: existing indexed identity for requested {requested}"
+            for indexType in [typeof<int32>; typeof<uint32>] do
+                for count in [65537; 65539] do
+                    let source = create count null
+                    let check = snapshot $"{indexType.Name}, wide generation={count}" source
+                    let result = source.ToIndexed indexType
+                    Expect.equal (result.IndexArray.GetType().GetElementType()) indexType $"{indexType.Name}: generation retains storage type"
+                    Expect.equal (values result.IndexArray) (Array.init count id) $"{indexType.Name}, count={count}: 32-bit generation remains supported"
+                    check()
+                for leftIndexed, rightIndexed in [true, true; false, true; true, false] do
+                    let context = $"{indexType.Name}, wide union indexed={leftIndexed}/{rightIndexed}"
+                    let left = create 65536 (if leftIndexed then indices indexType [|0; 65535|] else null)
+                    let right = create 2 (if rightIndexed then indices indexType [|0; 1|] else null)
+                    verifyUnion context indexType left right
+                let left = create 1 (indices indexType [|0|])
+                let right = create 1 (indices indexType [|-1; Int32.MaxValue; Int32.MinValue|])
+                verifyUnion $"{indexType.Name}: legacy 32-bit patterns without expansion" indexType left right
+            let left, right = create 65536 null, create 2 null
+            let checkLeft, checkRight = snapshot "non-indexed union" left, snapshot "non-indexed union" right
+            let result = left.Union right
+            Expect.isNull result.IndexArray "Non-indexed unions do not acquire a 16-bit limit"
+            Expect.equal result.VertexCount 65538 "Non-indexed vertex count"
+            checkLeft(); checkRight()
+
     module StripConversion =
 
         let private stripModes =
@@ -504,6 +661,11 @@ module Operations =
             "Union.Empty and exact-length attributes",     UnionPrefixes.emptyAndExact
             "Union.Dictionary and single-value controls",  UnionPrefixes.dictionaryAndSingleControls
             "Union.Type and topology error controls",      UnionPrefixes.errorControls
+
+            "Index storage.Generation boundaries",          IndexRepresentability.generationBoundaries
+            "Index storage.Reject overflowing unions",      IndexRepresentability.unionOverflow
+            "Index storage.Representable high-bit unions",  IndexRepresentability.representableUnions
+            "Index storage.Empty and wide controls",        IndexRepresentability.emptyAndWideControls
 
             "Strip conversion.Indexed conversion",               StripConversion.indexedConversion
             "Strip conversion.Non-indexed conversion",           StripConversion.nonIndexedConversion
