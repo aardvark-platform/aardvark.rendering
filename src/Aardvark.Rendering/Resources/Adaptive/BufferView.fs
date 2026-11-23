@@ -143,7 +143,11 @@ module BufferView =
     /// A zero stride means tightly packed elements. Returns zero if no complete element remains,
     /// or one for a single-value buffer. Only buffer-size metadata is inspected, not buffer contents.
     /// </summary>
-    /// <remarks>Offset and stride are assumed to be nonnegative.</remarks>
+    /// <remarks>
+    /// Offset and stride are assumed to be nonnegative. Counts are limited to Int32.MaxValue;
+    /// the limit is checked when the adaptive count is evaluated.
+    /// </remarks>
+    /// <exception cref="ArgumentException">if the complete-element count exceeds Int32.MaxValue.</exception>
     let getCount (view : BufferView) =
         if view.IsSingleValue then
             AVal.constant 1
@@ -160,7 +164,10 @@ module BufferView =
                 if sizeInBytes < firstEnd then 0
                 else
                     let stride = if view.Stride = 0 then elementSize else uint64 view.Stride
-                    int (1UL + (sizeInBytes - firstEnd) / stride)
+                    let count = 1UL + (sizeInBytes - firstEnd) / stride
+                    if count > uint64 Int32.MaxValue then
+                        BufferInternals.invalidArg $"element count {count} exceeds the supported maximum of {Int32.MaxValue}"
+                    int count
             )
 
     /// Retrieves up to count elements from the given buffer view as an array starting at startIndex.

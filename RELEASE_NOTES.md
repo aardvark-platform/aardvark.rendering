@@ -1,3 +1,5 @@
+- BufferView element counts above Int32.MaxValue now raise ArgumentException instead of wrapping, including automatic draw counts; large storage remains supported when the selected layout's count fits the limit.
+
 ### 5.6.14
 - [GL] `LodRendererStats.converged` is now cleared with the input change itself; in 5.6.13 it could stay true for a few milliseconds after a camera change.
 

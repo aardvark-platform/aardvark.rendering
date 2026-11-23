@@ -111,6 +111,120 @@ module BufferView =
                     Expect.equal evaluations (before + 1) $"{context}: clean reads remain cached"
                     Expect.equal reads evaluations $"{context}: clean reads do not query buffer size"
 
+        let private largeLayouts =
+            [ typeof<byte>, 0
+              typeof<int>, 0
+              typeof<int>, 8
+              typeof<int>, 1
+              typeof<int>, 3
+              typeof<V3f>, 24
+              typeof<double>, Int32.MaxValue ]
+
+        let private sizeForCount (elementType : Type) offset stride count tail =
+            let firstEnd = uint64 offset + uint64 elementType.CLRSize
+            let step = if stride = 0 then uint64 elementType.CLRSize else uint64 stride
+            if count = 0UL then firstEnd - 1UL
+            else firstEnd + (count - 1UL) * step + tail
+
+        let private expectOverflow (errors : ResizeArray<string>) context count action =
+            try
+                let actual : int = action()
+                errors.Add $"{context}: expected ArgumentException for count {count}, got {actual}"
+            with :? ArgumentException as error ->
+                Expect.equal (error.GetType()) typeof<ArgumentException> (context + ": exact exception type")
+                Expect.equal error.Message $"[Buffer] element count {count} exceeds the supported maximum of {Int32.MaxValue}." (context + ": buffer diagnostic")
+                Expect.isNull error.ParamName (context + ": existing buffer-error convention")
+
+        let representableLargeLayouts() =
+            for backend in [false; true] do
+                for elementType, stride in largeLayouts do
+                    for offset in [0; 7; Int32.MaxValue] do
+                        let step = if stride = 0 then elementType.CLRSize else stride
+                        for expected in [0UL; 1UL; uint64 Int32.MaxValue - 1UL; uint64 Int32.MaxValue] do
+                            for tail in [0UL; uint64 step - 1UL] |> List.distinct do
+                                let size = sizeForCount elementType offset stride expected tail
+                                let mutable reads = 0
+                                let buffer = metadataBuffer backend size (fun () -> reads <- reads + 1)
+                                let count = BufferView(buffer, elementType, offset, stride) |> BufferView.getCount
+                                let context = $"backend={backend}, type={elementType}, offset={offset}, stride={stride}, count={expected}, tail={tail}"
+                                for _ in 1 .. 3 do Expect.equal (AVal.force count) (int expected) context
+                                Expect.equal reads 1 (context + ": cached metadata-only evaluation")
+
+        let oversizedLayouts() =
+            let errors = ResizeArray<string>()
+            for backend in [false; true] do
+                for elementType, stride in largeLayouts do
+                    for offset in [0; 7; Int32.MaxValue] do
+                        for expected in [uint64 Int32.MaxValue + 1UL; uint64 Int32.MaxValue + 2UL; 1UL <<< 32; (1UL <<< 32) + 3UL] do
+                            let size = sizeForCount elementType offset stride expected 0UL
+                            let context = $"backend={backend}, type={elementType}, offset={offset}, stride={stride}"
+                            let buffer = metadataBuffer backend size ignore
+                            expectOverflow errors context expected (fun () -> BufferView(buffer, elementType, offset, stride) |> BufferView.getCount |> AVal.force)
+                let buffer = metadataBuffer backend UInt64.MaxValue ignore
+                expectOverflow errors $"backend={backend}, UInt64 maximum byte buffer" UInt64.MaxValue (fun () -> BufferView(buffer, typeof<byte>) |> BufferView.getCount |> AVal.force)
+            Expect.isTrue (errors.Count = 0) (String.concat "\n" errors)
+
+        let oversizedAdaptiveReplacement() =
+            let errors = ResizeArray<string>()
+            for elementType, stride in largeLayouts do
+                for offset in [0; 7; Int32.MaxValue] do
+                    let mutable reads, evaluations = 0, 0
+                    let source = cval (metadataBuffer false 0UL (fun () -> reads <- reads + 1))
+                    let buffer = AVal.custom (fun token -> evaluations <- evaluations + 1; source.GetValue token)
+                    let count = BufferView(buffer, elementType, offset, stride) |> BufferView.getCount
+                    Expect.equal (reads, evaluations) (0, 0) "Creating an adaptive count does not evaluate storage"
+                    for expected, backend in [3UL, false; uint64 Int32.MaxValue, true; uint64 Int32.MaxValue + 1UL, false;
+                                              3UL, true; 1UL <<< 32, true; uint64 Int32.MaxValue - 1UL, false;
+                                              (1UL <<< 32) + 3UL, true; 0UL, false; 4UL, true] do
+                        let size = sizeForCount elementType offset stride expected 0UL
+                        let beforeReads, beforeEvaluations = reads, evaluations
+                        transact (fun () -> source.Value <- metadataBuffer backend size (fun () -> reads <- reads + 1))
+                        let context = $"type={elementType}, offset={offset}, stride={stride}, count={expected}, backend={backend}"
+                        Expect.equal (reads, evaluations) (beforeReads, beforeEvaluations) (context + ": replacement remains lazy")
+                        Expect.isTrue count.OutOfDate (context + ": invalidated count")
+                        if expected > uint64 Int32.MaxValue then
+                            expectOverflow errors context expected (fun () -> AVal.force count)
+                        else
+                            for _ in 1 .. 3 do Expect.equal (AVal.force count) (int expected) (context + ": cached valid result after replacement")
+                        Expect.equal (reads, evaluations) (beforeReads + 1, beforeEvaluations + 1) (context + ": one metadata read and dependency evaluation")
+            Expect.isTrue (errors.Count = 0) (String.concat "\n" errors)
+
+        let oversizedDrawCounts() =
+            let errors = ResizeArray<string>()
+            for backend in [false; true] do
+                for indexed in [false; true] do
+                    let elementType = if indexed then typeof<uint32> else typeof<V3f>
+                    let offset, stride = 7, 2 * elementType.CLRSize
+                    let mutable reads = 0
+                    let storage = cval (metadataBuffer backend 0UL (fun () -> reads <- reads + 1))
+                    let buffer = AVal.custom (fun token -> storage.GetValue token)
+                    let view = BufferView(buffer, elementType, offset, stride)
+                    let calls bounded =
+                        let node =
+                            if bounded then Sg.render IndexedGeometryMode.TriangleList (DrawCallInfo(FaceVertexCount = 3, InstanceCount = 1)) :> ISg
+                            else Sg.draw IndexedGeometryMode.TriangleList
+                        let graph =
+                            if indexed then
+                                node |> Sg.vertexArray DefaultSemantic.Positions [|V3f.Zero; V3f.XAxis; V3f.YAxis|] |> Sg.indexBuffer view
+                            else node |> Sg.vertexBuffer DefaultSemantic.Positions view
+                        let renderObject = graph.RenderObjects(Ag.Scope.Root) |> ASet.force |> Seq.exactlyOne :?> RenderObject
+                        match renderObject.DrawCalls with
+                        | DrawCalls.Direct value -> value
+                        | _ -> failtest "Expected a direct draw without a graphics resource"
+                    let automatic, bounded = calls false, calls true
+                    Expect.equal reads 0 "Building draw calls does not inspect buffer metadata"
+                    for expected in [3UL; uint64 Int32.MaxValue; uint64 Int32.MaxValue + 1UL; 1UL <<< 32; (1UL <<< 32) + 3UL; 3UL] do
+                        transact (fun () -> storage.Value <- metadataBuffer backend (sizeForCount elementType offset stride expected 0UL) (fun () -> reads <- reads + 1))
+                        let context = $"backend={backend}, indexed={indexed}, count={expected}"
+                        let before = reads
+                        let info = AVal.force bounded |> Array.exactlyOne
+                        Expect.equal (info.FaceVertexCount, info.InstanceCount) (3, 1) (context + ": explicitly bounded draw remains usable")
+                        Expect.equal reads before (context + ": bounded draw does not evaluate automatic count")
+                        let force() = (AVal.force automatic |> Array.exactlyOne).FaceVertexCount
+                        if expected > uint64 Int32.MaxValue then expectOverflow errors context expected force
+                        else Expect.equal (force()) (int expected) (context + ": automatic count and recovery")
+            Expect.isTrue (errors.Count = 0) (String.concat "\n" errors)
+
         let singleValues() =
             let mutable evaluations = 0
             let source = cval 17
@@ -159,6 +273,10 @@ module BufferView =
             "strided elements and unpadded tails",             Cases.stridedElements
             "native and backend metadata only",                Cases.metadataOnly
             "adaptive replacement and cached evaluation",      Cases.adaptiveReplacement
+            "representable large layouts retain their counts", Cases.representableLargeLayouts
+            "oversized layout counts are rejected",            Cases.oversizedLayouts
+            "oversized adaptive replacements recover",         Cases.oversizedAdaptiveReplacement
+            "automatic and bounded oversized draw counts",     Cases.oversizedDrawCounts
             "single values ignore layout and payload changes", Cases.singleValues
             "automatic scene graph draw counts",               Cases.automaticDrawCounts
         ]
