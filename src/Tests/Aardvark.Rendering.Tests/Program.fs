@@ -55,7 +55,11 @@ let tests (targets: TestTarget list) =
             Rendering.ResourceManagement.tests
             Rendering.Commands.tests
             Rendering.LodRenderer.tests
-            Rendering.SceneGraph.tests
+            Rendering.SceneGraph.General.tests
+            Rendering.SceneGraph.Nodes.tests
+            Rendering.SceneGraph.BoundingBox.tests
+            Rendering.SceneGraph.Picking.tests
+            Rendering.SceneGraph.BufferCache.tests
             Rendering.Transparency.tests
         ]
 

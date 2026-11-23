@@ -83,6 +83,11 @@ uses the matching namespace. For example, a file in `Tests/Texture/` uses:
 namespace Aardvark.Rendering.Tests.Texture
 ```
 
+A subfolder below a category may add a namespace segment with its name, and its groups
+carry that name as a prefix. For example, the files in `Tests/Rendering/SceneGraph/` use
+`namespace Aardvark.Rendering.Tests.Rendering.SceneGraph` and register groups such as
+`SceneGraph.Picking`, discovered as `Rendering.Cpu.SceneGraph.Picking.<case>`.
+
 Put test implementations in a `Cases` module. Another descriptive module is acceptable
 when a large group has meaningful subgroups. Only actual test-case implementations should
 be non-private within these modules; mark helper functions, fixtures, and other bindings
@@ -155,7 +160,7 @@ mechanism.
 Representative examples:
 
 - Mixed CPU/GPU selection: `Tests/Buffer/ManagedBuffer.fs`
-- Test subgroups: `Tests/Rendering/SceneGraph.fs`
+- Parameterized cases: `Tests/Rendering/SceneGraph/Picking.fs`
 - Dotted group/case names: `Tests/Texture/Compression.fs`
 
 ## Environment Variables
