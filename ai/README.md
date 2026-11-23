@@ -48,6 +48,7 @@ Index for AI coding assistants. Read only the doc you need.
 - Debug configuration, shader printing -> DEBUG.md
 - `DebugLevel`, `DebugConfig`, validation layers -> DEBUG.md
 - `PrintShaderCode`, `Debug.Printfn()`, RenderDoc, Nsight -> DEBUG.md
+- Environment variable switches (`EnvVar`) -> DEBUG.md
 
 ### Application
 - `OpenGlApplication`, `VulkanApplication` -> APPLICATION.md
@@ -65,6 +66,7 @@ Index for AI coding assistants. Read only the doc you need.
 - `prepareCases*`, `TestTarget`, and `testAllTargets` -> TESTING.md
 - Test modules, names, parameter matrices, and registration -> TESTING.md
 - Running a subset of tests (`--target`, `--filter`, `--exclude`, `--test`) -> TESTING.md
+- Overriding environment switches in tests -> TESTING.md
 
 ### Consumer Integration
 - Application initialization patterns -> CONSUMER-PATTERNS.md

@@ -532,6 +532,17 @@ let customDebug = {
 | OptimizeShaders | Yes | Yes | Yes | No |
 | VerifyShaderCacheIntegrity | No | No | No | Yes |
 
+### 7.3 Environment Variables
+
+Switches read from the process environment go through the `EnvVar` registry
+(`src/Aardvark.Rendering/Common/EnvVar.fs`), a static class with one documented string
+property per variable; the registry is the complete list. A value is read once on first
+access and cached, so later changes to the process environment are ignored. Setting a
+property overrides the environment, setting it to `null` forgets the override and reads the
+environment again on the next access. `EnvVar.IsEnabled` parses switch values (`1`, `on`,
+`true`, `yes` enable, anything else disables) and `EnvVar.IsSet` tests for a non-empty value.
+The first read of a set variable logs `[Env] NAME=value`.
+
 ---
 
 ## 8. Gotchas

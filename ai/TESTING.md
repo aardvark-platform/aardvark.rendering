@@ -158,6 +158,19 @@ Representative examples:
 - Test subgroups: `Tests/Rendering/SceneGraph.fs`
 - Dotted group/case names: `Tests/Texture/Compression.fs`
 
+## Environment Variables
+
+Library switches are read through the `EnvVar` registry (see DEBUG.md), which caches a
+variable on first access. A test that needs a switch sets the registry property and resets
+it to `null` in a `finally` block; `Environment.SetEnvironmentVariable` has no effect once
+the variable has been read:
+
+```fsharp
+EnvVar.SOME_SWITCH <- "1"
+try run ()
+finally EnvVar.SOME_SWITCH <- null
+```
+
 ## Validation
 
 Restore and run the test project with the repository commands:

@@ -21,6 +21,7 @@
     <Compile Include="Common\ClearValuesCSharp.fs" />
     <Compile Include="Common\FrameStatistics.fs" />
     <Compile Include="Common\RenderToken.fs" />
+    <Compile Include="Common\EnvVar.fs" />
     <Compile Include="Utilities\Locks\ColoredLock.fs" />
     <Compile Include="Utilities\Locks\LockedResource.fs" />
     <Compile Include="Utilities\Locks\RenderTaskLock.fs" />

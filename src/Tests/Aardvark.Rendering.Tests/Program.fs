@@ -92,6 +92,7 @@ let tests (targets: TestTarget list) =
 
         testAllTargets "Other" [
             Other.Camera.tests
+            Other.EnvVar.tests
             Other.ShapeListConcat.tests
             Other.UniformWriter.tests
             Other.AdaptiveResource.tests
