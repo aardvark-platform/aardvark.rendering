@@ -72,16 +72,16 @@ module RenderObject =
 
             rj.Activate <- activate
 
-        let attributes =
-            AttributeProvider.union rj.VertexAttributes rj.InstanceAttributes
-
-        rj.Uniforms <- new Providers.UniformProvider(scope, scope.Uniforms, [attributes])
-
-        let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes")
-        let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
+        let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes") :> IAttributeProvider
+        let instanceAttributes = new Providers.AttributeProvider(scope, "InstanceAttributes") :> IAttributeProvider
 
         rj.VertexAttributes <- vertexAttributes
         rj.InstanceAttributes <- instanceAttributes
+
+        let attributes =
+            AttributeProvider.union vertexAttributes instanceAttributes
+
+        rj.Uniforms <- new Providers.UniformProvider(scope, scope.Uniforms, [attributes])
 
         rj.Surface <- scope.Surface
 

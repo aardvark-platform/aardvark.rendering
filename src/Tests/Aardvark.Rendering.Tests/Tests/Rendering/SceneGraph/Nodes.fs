@@ -116,10 +116,31 @@ module Nodes =
 
             Expect.approxEquals result.Forward expected.Forward 0.001 "Invalid model trafo"
 
+        let hasUniforms _ =
+            let sg =
+                Sg.fullScreenQuad
+                |> Sg.uniform' "Foo" 1
+                |> Sg.instanceArray (Symbol.Create "InstanceTrafo") [| M44f.Identity |]
+
+            let ro =
+                sg.RenderObjects(Ag.Scope.Root).Content.GetValue()
+                |> Seq.head :?> RenderObject
+
+            let has (name : string) =
+                match ro.Uniforms.TryGetUniform(Ag.Scope.Root, Symbol.Create name) with
+                | ValueSome v -> v.GetValueUntyped AdaptiveToken.Top |> unbox<bool>
+                | ValueNone   -> failtestf "uniform %s not found" name
+
+            Expect.isTrue  (has "HasFoo") "HasFoo (uniform)"
+            Expect.isTrue  (has "HasPositions") "HasPositions (vertex attribute)"
+            Expect.isTrue  (has "HasInstanceTrafo") "HasInstanceTrafo (instance attribute)"
+            Expect.isFalse (has "HasMissing") "HasMissing"
+
     let tests (target: TestTarget) =
         [
             if target = TestTarget.Cpu then
-                "ModelTrafo", Cases.modelTrafo
+                "ModelTrafo",   Cases.modelTrafo
+                "Has uniforms", Cases.hasUniforms
 
             elif target.IsGpu then
                 "OnActivation multiple RenderObjects", Cases.onActivationMultiRenderObject
