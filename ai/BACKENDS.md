@@ -265,6 +265,10 @@ A fragment shader that reads `gl_SampleID` or `gl_SamplePosition` is marked as n
 
 `Device.GetMemoryStatistics()` returns one `MemoryHeapStatistics` per memory heap: flags, capacity, the number of blocks and live allocations with their sizes, and the usage and budget the allocator reports (a cheap budget query; usage and budget are accurate when `VK_EXT_memory_budget` is enabled). `Device.PrintMemoryUsage` prints the same figures. Tests use it to check that a frame allocated nothing new.
 
+### Driver Workarounds
+
+NVIDIA drivers read a 32-byte value such as `dmat4` from a storage buffer 16 bytes early when the buffer's base address is 16-byte but not 32-byte aligned, although that placement is valid. Buffers with storage usage therefore get a 32-byte minimum memory alignment on NVIDIA (`minStorageBufferAlignment` in `src/Aardvark.Rendering.Vulkan/Resources/Buffers/Buffer.fs`); other vendors keep the driver-reported alignment. Reproduction: https://github.com/hyazinthh/repro-nvidia-dmat4.
+
 ### Pipeline Caching
 
 Vulkan caches `VkPipeline` objects (expensive to create):

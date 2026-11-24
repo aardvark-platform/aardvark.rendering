@@ -92,6 +92,7 @@
     <Compile Include="Tests\Compute\MutableInputBinding.fs" />
     <Compile Include="Tests\Compute\PushConstants.fs" />
     <Compile Include="Tests\Compute\Dispatch.fs" />
+    <Compile Include="Tests\Compute\Float64.fs" />
     <Compile Include="Tests\Compute\Task.fs" />
     <Compile Include="Tests\Raytracing\TraceGeometryTests.fs" />
     <Compile Include="Tests\IndexedGeometry\OperationsTests.fs" />

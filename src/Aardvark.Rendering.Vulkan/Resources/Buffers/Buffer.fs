@@ -334,9 +334,22 @@ module Buffer =
 
     let private emptySize = 32UL
 
+    // Driver workaround: NVIDIA reads a whole dmat4 (and other 32-byte vectors) from a storage
+    // buffer 16 bytes early when the buffer's base address is 16-byte but not 32-byte aligned,
+    // although the driver reports 16 as its memory and offset alignment and such a placement is
+    // valid Vulkan. On NVIDIA, storage buffers therefore get the std430 base alignment of the
+    // widest scalar block member (dvec4 = 32 bytes) as a minimum memory alignment.
+    let private minStorageBufferAlignment (device: Device) =
+        if device.PhysicalDevice.Vendor.StartsWith("NVIDIA", StringComparison.OrdinalIgnoreCase) then 32UL
+        else 0UL
+
     let private createInternal (concurrent: bool) (export: bool) (usage: VkBufferUsageFlags)
                                (alignment: uint64) (size: uint64) (memory: IDeviceMemory) =
         let device = memory.Device
+
+        let alignment =
+            if usage.HasFlag VkBufferUsageFlags.StorageBufferBit then max alignment (minStorageBufferAlignment device)
+            else alignment
 
         let mutable usage = usage
 

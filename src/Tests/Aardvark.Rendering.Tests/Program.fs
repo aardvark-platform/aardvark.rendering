@@ -74,6 +74,7 @@ let tests (targets: TestTarget list) =
             Compute.MutableInputBinding.tests
             Compute.PushConstants.tests
             Compute.Dispatch.tests
+            Compute.Float64.tests
             Compute.ComputeTasks.tests
         ]
 
