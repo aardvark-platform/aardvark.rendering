@@ -73,6 +73,7 @@ let tests (targets: TestTarget list) =
 
         testAllTargets "IndexedGeometry" [
             IndexedGeometry.Operations.tests
+            IndexedGeometry.AssimpMesh.tests
             IndexedGeometry.Sphere.tests
             IndexedGeometry.CylinderNormals.tests
             IndexedGeometry.PrimitiveSequences.tests

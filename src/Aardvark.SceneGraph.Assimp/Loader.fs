@@ -614,8 +614,16 @@ module Loader =
 
                     res.Mode <- mode
                     let indices = m.GetIndices()
-                    let identity = indices |> Seq.indexed |> Seq.forall(fun (a,b) -> a = b)
-                    if not identity then
+                    let mutable indexCount = 0
+                    let identity =
+                        indices |> Seq.forall(fun index ->
+                            if index = indexCount && indexCount < m.VertexCount then
+                                indexCount <- indexCount + 1
+                                true
+                            else
+                                false
+                        )
+                    if not identity || indexCount <> m.VertexCount then
                         res.IndexArray <- Array.ofSeq indices
 
                     
