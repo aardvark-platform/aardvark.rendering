@@ -1,3 +1,5 @@
+- Assimp mesh conversion now retains identity-prefix indices when trailing vertices are unused, preventing unintended extra primitives without trimming vertex attributes.
+
 ### 5.6.14
 - [GL] `LodRendererStats.converged` is now cleared with the input change itself; in 5.6.13 it could stay true for a few milliseconds after a camera change.
 
