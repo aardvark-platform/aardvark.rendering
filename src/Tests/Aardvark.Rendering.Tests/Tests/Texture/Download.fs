@@ -459,6 +459,67 @@ module TextureDownload =
                 Expect.validStencilResult stencilResult size 1 3
             )
 
+        let private stencilDestinationLayouts (size : V2i) =
+            let row = 2L * int64 size.X + 3L
+            [ "contiguous", 1L, int64 size.X
+              "padded rows", 1L, int64 size.X + 5L
+              "interleaved", 2L, row
+              "mirrored X", -2L, row
+              "mirrored Y", 2L, -row
+              "mirrored XY", -2L, -row
+              "transposed", int64 size.Y + 3L, 1L ]
+
+        let private checkStencilDestinations (errors : ResizeArray<string>) (runtime : IRuntime)
+                                             (texture : IBackendTexture) (offset : V2i) label (reference : Matrix<int>) =
+            let size = V2i reference.Size
+            let sentinel = 0x5A5A5A5A
+            for name, dx, dy in stencilDestinationLayouts size do
+                let origin = 17L + max 0L (-dx) * (int64 size.X - 1L) + max 0L (-dy) * (int64 size.Y - 1L)
+                let length = int (origin + abs dx * (int64 size.X - 1L) + abs dy * (int64 size.Y - 1L) + 32L)
+                let info = MatrixInfo(origin, V2l size, V2l(dx, dy))
+                for prefill in [0; -1; Int32.MinValue; 0x12345678] do
+                    for convenience in [false; true] do
+                        let storage = Array.create length sentinel
+                        let selected = Array.create length false
+                        let expected = Array.copy storage
+                        for y in 0 .. size.Y - 1 do
+                            for x in 0 .. size.X - 1 do
+                                let index = int (origin + int64 x * dx + int64 y * dy)
+                                storage.[index] <- prefill
+                                selected.[index] <- true
+                                expected.[index] <- reference.[x, y]
+                        let target = Matrix<int>(storage, info)
+                        let context = $"{texture.Format}, {label}, layout={name}, prefill={prefill}, convenience={convenience}"
+                        if convenience then texture.DownloadStencil(target, offset = offset)
+                        else runtime.DownloadStencil(texture, target, offset = offset)
+                        for i in 0 .. length - 1 do
+                            if not selected.[i] then Expect.equal storage.[i] sentinel $"{context}: untouched surrounding element {i}"
+                        let mutable index = 0
+                        while index < length && storage.[index] = expected.[index] do index <- index + 1
+                        if index < length then errors.Add $"{context}: element {index}, expected={expected.[index]}, actual={storage.[index]}"
+
+        let stencilIntegerDestinations (runtime : IRuntime) =
+            runtime |> requireExtensionGL ["GL_ARB_texture_stencil8"]
+            let errors = ResizeArray<string>()
+            for format in [TextureFormat.StencilIndex8; TextureFormat.Depth24Stencil8; TextureFormat.Depth32fStencil8] do
+                let size = V2i(7, 5)
+                use texture = runtime.CreateTexture2D(size, format)
+                for value in [0; 3; 128; 255] do
+                    if format.HasDepth then runtime.ClearDepthStencil(texture, 0.5, value)
+                    else runtime.ClearStencil(texture, value)
+                    let reference = Matrix<int>(V2l size, value)
+                    checkStencilDestinations errors runtime texture V2i.Zero $"clear={value}" reference
+                    Expect.equal (texture.DownloadStencil().Data |> Array.distinct) [|value|] $"{format}, clear={value}: allocating zero-initialized control"
+                let clear = clear { depth 0.95; stencil 128 }
+                renderQuadToDepthStencil runtime format 1 clear (V2i(9, 7)) (fun rendered ->
+                    let offset = V2i(1, 0)
+                    let region = Box2i.FromMinAndSize(offset, size)
+                    let reference = rendered.DownloadStencil(region = region)
+                    Expect.validStencilResult reference size 3 128
+                    checkStencilDestinations errors runtime rendered offset "rendered subregion" reference
+                )
+            Expect.isTrue (errors.Count = 0) (String.concat "\n" errors)
+
         let windowValidation (runtime : IRuntime) =
             use texture = runtime.CreateTexture3D(V3i(8, 9, 10), TextureFormat.Rgba8, levels = 2)
             // Use a fixed target buffer: an allocating region overload could allocate before validation.
@@ -548,6 +609,9 @@ module TextureDownload =
             "Depth24Stencil8",          Cases.textureDepth24Stencil8
             "Depth32fStencil8",         Cases.textureDepth32fStencil8
             "StencilIndex8",            Cases.textureStencilIndex8
+
+            if target = TestTarget.GL then
+                "Stencil integer destinations preserve surrounding storage", Cases.stencilIntegerDestinations
 
             "Arguments out of range",   Cases.argumentsOutOfRange
             "Volume window validation", Cases.windowValidation

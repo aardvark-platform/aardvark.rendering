@@ -260,15 +260,25 @@ module internal TextureDownloadImplementation =
             | TextureFormat.Depth32fStencil8 -> Some (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev, 4)
             | _ -> None
 
+        let private copyStencil (matrix : Matrix<int>) (flipY : bool) (byteOffset : int)
+                                (channels : int) (elementSize : int) (alignedLineSize : nativeint) (src : nativeint) =
+            matrix.Data |> NativePtr.pinArr (fun dst ->
+                let srcInfo = Tensor4Info.deviceLayoutWithOffset flipY byteOffset elementSize alignedLineSize channels matrix.Size.XYI
+                let dstInfo = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<int>()
+                let src = src |> NativeTensor4.ofNativeInt<uint8> srcInfo
+                let dst = dst.Address |> NativeTensor4.ofNativeInt<uint8> dstInfo
+                (src, dst) ||> NativeTensor4.iterPtr2 (fun _ src dst ->
+                    NativePtr.write (NativePtr.cast dst : nativeptr<int>) (int (NativePtr.read src))
+                )
+            )
+
         let downloadStencil (texture : Texture) (level : int) (slice : int) (offset : V2i) (matrix : Matrix<int>) =
             let size = V3i matrix.Size.XYI
 
             match texture.Format with
             | Stencil(format, typ, byteOffset) ->
-                matrix.Data |> NativePtr.pinArr (fun dst ->
-                    let dstInfo = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<int>()
-                    downloadNative texture level slice offset.XYO size byteOffset sizeof<uint8> format typ dst.Address dstInfo
-                )
+                let copy = copyStencil matrix texture.IsCubeOr2D byteOffset
+                downloadGeneralPixelData texture level slice offset.XYO size format typ copy
 
             | fmt -> failwithf "[GL] %A is not a supported stencil format" fmt
 
