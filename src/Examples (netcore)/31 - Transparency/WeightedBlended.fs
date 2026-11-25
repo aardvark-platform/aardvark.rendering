@@ -208,6 +208,7 @@ module WeightedBlended =
                 |> Sg.shader {
                     do! DefaultSurfaces.trafo
                     do! DefaultSurfaces.sgColor
+                    do! DefaultSurfaces.simpleLighting
                     do! Shaders.weightedBlend
                 }
 

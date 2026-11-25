@@ -23,6 +23,7 @@ module Naive =
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.sgColor
+                do! DefaultSurfaces.simpleLighting
             }
             |> Sg.pass RenderPass.transparent
 

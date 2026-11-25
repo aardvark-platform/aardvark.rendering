@@ -26,6 +26,7 @@ module BuiltIn =
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.sgColor
+                do! DefaultSurfaces.simpleLighting
             }
             |> Sg.transparent
 
