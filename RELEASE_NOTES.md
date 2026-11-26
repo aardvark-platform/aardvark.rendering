@@ -1,3 +1,5 @@
+- Reduced temporary allocations in non-indexed `CubeMap` mapping and iteration while preserving level-major traversal and independent mapping results.
+
 ### 5.6.14
 - [GL] `LodRendererStats.converged` is now cleared with the input change itself; in 5.6.13 it could stay true for a few milliseconds after a camera change.
 

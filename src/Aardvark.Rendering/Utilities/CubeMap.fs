@@ -104,7 +104,7 @@ module CubeMap =
     /// Builds a new cube map whose elements are the results of applying the given
     /// function to each of the elements of the cube.
     let map (f : 'a -> 'b) (c : CubeMap<'a>) =
-        c |> mapi (fun _ _ x -> f x)
+        CubeMap(c.Data |> Array.map f)
 
     /// Builds a new cube map whose elements are the results of applying the given
     /// function to pairs of elements of each cube.
@@ -114,7 +114,7 @@ module CubeMap =
     /// Builds a new cube map whose elements are the results of applying the given
     /// function to pairs of elements of each cube.
     let map2 (f : 'a -> 'b -> 'c) (a : CubeMap<'a>) (b : CubeMap<'b>) =
-        mapi2 (fun _ _ x y -> f x y) a b
+        CubeMap(Array.map2 f a.Data b.Data)
 
     /// Applies the given function to each element of the cube map.
     let iteri (f : CubeSide -> int -> 'a -> unit) (c : CubeMap<'a>) =
@@ -122,7 +122,7 @@ module CubeMap =
 
     /// Applies the given function to each element of the cube map.
     let iter (f : 'a -> unit) (c : CubeMap<'a>) =
-        c |> iteri (fun _ _ x -> f x)
+        c.Data |> Array.iter f
 
     /// Applies the given function to pairs of elements of each cube map.
     let iteri2 (f : CubeSide -> int -> 'a -> 'b -> unit) (a : CubeMap<'a>) (b : CubeMap<'b>) =
@@ -130,4 +130,4 @@ module CubeMap =
 
     /// Applies the given function to pairs of elements of each cube map.
     let iter2 (f : 'a -> 'b -> unit) (a : CubeMap<'a>) (b : CubeMap<'b>) =
-        iteri2 (fun _ _ x y -> f x y) a b
+        Array.iter2 f a.Data b.Data
