@@ -86,6 +86,7 @@ let tests (targets: TestTarget list) =
             Utilities.Trie.tests
             Utilities.TaskUtilities.tests
             Utilities.LockedSet.tests
+            Utilities.CubeMapTraversal.tests
         ]
 
         testAllTargets "Other" [

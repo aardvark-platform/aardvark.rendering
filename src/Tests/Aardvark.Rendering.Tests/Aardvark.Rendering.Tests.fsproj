@@ -95,6 +95,7 @@
     <Compile Include="Tests\Utilities\TrieTests.fs" />
     <Compile Include="Tests\Utilities\TaskUtilitiesTests.fs" />
     <Compile Include="Tests\Utilities\LockedSetTests.fs" />
+    <Compile Include="Tests\Utilities\CubeMapTraversalTests.fs" />
     <Compile Include="Tests\Other\ShapeList\ShapeListBenchmarks.fs" />
     <Compile Include="Tests\Other\ShapeList\ShapeListConcatTests.fs" />
     <Compile Include="Tests\Other\Camera.fs" />
