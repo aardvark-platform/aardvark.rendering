@@ -4,7 +4,7 @@ Patterns for projects that use Aardvark.Rendering as a dependency.
 
 ## Application Initialization
 
-### Slim.GL (Headless)
+### Slim.GL (Window)
 
 When: Standalone viewers, CLI tools, offscreen rendering.
 
@@ -13,10 +13,7 @@ let app = new OpenGlApplication()
 let win = app.CreateGameWindow(4)  // samples
 
 let runtime = app.Runtime
-let signature = runtime.CreateFramebufferSignature [
-    DefaultSemantic.Colors, TextureFormat.Rgba8
-    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
-]
+let signature = win.FramebufferSignature   // matches the window's attachments and sample count
 
 let sg = ... // scene graph
 let task = sg |> Sg.compile runtime signature
@@ -44,6 +41,7 @@ When: Windows desktop apps with rendering panels.
 
 ```fsharp
 let ctrl = new Aardvark.Application.WinForms.RenderControl()
+app.Initialize(ctrl, samples = 1)   // attaches the backend implementation; RenderTask is ignored before
 ctrl.RenderTask <- task
 form.Controls.Add(ctrl)
 ```

@@ -29,8 +29,9 @@ type DebugLevel =
 // Simple initialization
 let runtime = new GL.Runtime(DebugLevel.Normal)
 
-// Or for Vulkan
-let runtime = new Vulkan.Runtime(device, DebugLevel.Normal)
+// Or for Vulkan: the config belongs to the Instance (HeadlessVulkanApplication, VulkanApplication or the window builder)
+let app = new HeadlessVulkanApplication(DebugLevel.Normal)
+let runtime = app.Runtime
 ```
 
 **Performance Impact:**
@@ -52,6 +53,8 @@ Source: [src/Aardvark.Rendering.GL/Core/Config.fs](../src/Aardvark.Rendering.GL/
 | Minimal | Warnings/Errors | PrintError | No | No | No |
 | Normal | Low severity+ | ThrowOnError | Yes | Yes | No |
 | Full | All messages | ThrowOnError | Yes | Yes | Yes |
+
+`Full` also enables `DebugComputeTasks`; `Minimal` and above enable `DoubleAttributePerformanceWarning`.
 
 ### 2.2 Fine-Grained DebugConfig
 
@@ -133,6 +136,8 @@ Source: [src/Aardvark.Rendering.Vulkan/Core/Common/Config.fs](../src/Aardvark.Re
 | Minimal | Standard | Warning+ | No | No | Yes |
 | Normal | Standard | Information+ | Yes | No | Yes |
 | Full | Full (all features) | Debug (all messages) | Yes | Yes | No |
+
+`Full` also enables `PrintRenderTaskRecompile`; `Normal` and above enable `PrintAccelerationStructureCompactionInfo`. On portability-subset devices (MoltenVK) spirv-opt is skipped regardless of `OptimizeShaders`.
 
 ### 3.2 Fine-Grained DebugConfig
 
@@ -254,6 +259,7 @@ Both backends print GLSL code to the console when `PrintShaderCode = true`.
 **When compilation occurs:**
 - Lazy: First use of shader (after scene compilation)
 - Cached: Not printed when loaded from cache (delete cache to force recompilation)
+- Failures: a shader that fails to compile is printed regardless of the flag
 
 **OpenGL example:**
 
@@ -268,10 +274,8 @@ let task = runtime.CompileRender(signature, scene)
 **Vulkan example:**
 
 ```fsharp
-let device = // ... create Vulkan device
-let runtime = new Vulkan.Runtime(device, {
-    DebugConfig.None with PrintShaderCode = true
-})
+let app = new HeadlessVulkanApplication({ Vulkan.DebugConfig.None with PrintShaderCode = true })
+let runtime = app.Runtime
 
 // GLSL printed before SPIR-V compilation
 ```
@@ -436,7 +440,7 @@ let task = runtime.CompileRender(signature, scene)
 // 4. Look for compilation errors in log
 
 // If shader is cached, delete cache to force recompilation:
-// Delete: %TEMP%/Aardvark/ShaderCache/ (Windows)
+// Delete: <CachingProperties.CacheDirectory>/Shaders/OpenGL or /Shaders/Vulkan (or set runtime.ShaderCachePath)
 ```
 
 ### 6.2 "Validation Errors (Vulkan)"
@@ -506,7 +510,7 @@ let customDebug = {
 | `ErrorFlagCheck` (GL) | GL | GL error flag checking | Low to Medium |
 | `DebugRenderTasks` (GL) | GL | Log GL calls during rendering | High |
 | `ValidationLayer` (Vulkan) | Vulkan | Vulkan validation features | Medium to High |
-| `DebugReport` (Vulkan) | Vulkan | Validation callback verbosity | Low (async) to Medium (sync) |
+| `DebugReport` (Vulkan) | Vulkan | Validation callback verbosity (`Verbosity`, `BreakOnError`, `TraceObjectHandles`) | Low to Medium |
 | `GenerateShaderDebugInfo` (Vulkan) | Vulkan | Nsight source debugging | Low (larger SPIR-V) |
 | `PrintRenderTaskRecompile` (Vulkan) | Vulkan | Log task recompilation | Negligible |
 | `ShaderValidation.DebugPrint` (Vulkan) | Vulkan | `Debug.Printfn()` support | Medium |
@@ -542,6 +546,10 @@ property overrides the environment, setting it to `null` forgets the override an
 environment again on the next access. `EnvVar.IsEnabled` parses switch values (`1`, `on`,
 `true`, `yes` enable, anything else disables) and `EnvVar.IsSet` tests for a non-empty value.
 The first read of a set variable logs `[Env] NAME=value`.
+
+Registered variables: `AARDVARK_OIT` and `AARDVARK_OIT_ABUFFER_DEBUG` (transparency, RENDER-CORE.md),
+`AARDVARK_VULKAN_INLINE_COMMANDS`, `AARDVARK_VULKAN_LIBRARY` and `AARDVARK_VULKAN_DEVICE` (BACKENDS.md),
+`AARDVARK_LEGACY_SG` (SG-SEMANTICS.md) and the `AARDVARK_HEAP_*` switches (HEAP.md).
 
 ---
 

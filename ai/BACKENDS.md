@@ -11,7 +11,7 @@ Both OpenGL (GL) and Vulkan backends implement `IRuntime` with different strateg
 | Aspect | OpenGL | Vulkan |
 |--------|--------|--------|
 | **State Model** | Stateful (glState tracks current bindings) | Stateless (commands recorded to buffer) |
-| **Context** | `ContextHandle` (thread-local) | `VkDevice` (thread-safe) |
+| **Context** | `Context` with a pool of `ContextHandle`s (one current per thread) | `Device` wrapping `VkDevice` (thread-safe) |
 | **Concurrency** | Multi-context per GPU, reader-writer locks | Single device, lock-free command buffer pools |
 | **Pipeline Caching** | Per-(signature, effect, topology) | Per-(signature, effect, topology) + VkPipeline caching |
 | **Shader Format** | GLSL (runtime compilation via FShade) | SPIR-V (runtime compilation via FShade) |
@@ -19,7 +19,7 @@ Both OpenGL (GL) and Vulkan backends implement `IRuntime` with different strateg
 | **Resource Sharing** | Shared across contexts in pool | Shared via device handles |
 | **Debug Support** | GL debug output callbacks | VkDebugUtilsMessenger |
 
-**Common Interface:** Both implement `IRuntime` + `IFramebufferRuntime` + `ITextureRuntime` + `IBufferRuntime` + `IComputeRuntime`.
+**Common Interface:** Both implement `IRuntime`, which inherits `IFramebufferRuntime` (and through it `ITextureRuntime` and `IBufferRuntime`), `IComputeRuntime`, `IQueryRuntime`, `IRaytracingRuntime` and `ILodRuntime`.
 
 ---
 
@@ -52,12 +52,12 @@ let buffer = runtime.CreateBuffer(1024UL, BufferUsage.All, BufferStorage.Device)
 
 ### GL.Runtime Class Structure
 
-**Key members:**
-- `Context : ContextHandle` - currently bound context
-- `ContextLock : IDisposable` - acquires context for thread safety
-- `ResourceContexts : ContextHandle[]` - background contexts for resource creation
-- `DefaultFramebuffer : IFramebuffer` - main window framebuffer
-- `MemoryInfo : MemoryUsage` - texture/buffer allocation tracking
+**Key members** (`src/Aardvark.Rendering.GL/Runtime/Runtime.fs`):
+- `Context : Context` - the context object; its `ResourceContexts` are the pooled handles for resource creation and `Context.MemoryUsage` tracks allocations
+- `ContextLock : IDisposable` - makes a context current on the calling thread
+- `Initialize(context)` - binds the context after construction
+- `DebugConfig`, `ShaderCachePath` - debug settings and the on-disk shader cache location
+- the `IRuntime` capability members (`SupportsShaderFloat64`, `MaxStorageBufferBytes`, ...)
 
 ### Resource Management (Multi-Context)
 
@@ -75,7 +75,7 @@ let buf = runtime.CreateBuffer(...)
 ```
 
 **Multi-context rules:**
-- Resources created in any context become shared via `GL_ARB_shared_contexts`
+- Resources created in any context are shared, because every context is created with the first one as its parent (`RuntimeConfig.RobustContextSharing` serializes creation when drivers misbehave)
 - VAOs are **NOT** shared; each context builds its own
 - Textures, buffers, samplers, programs **ARE** shared
 - GL state (`glBindBuffer`, `glBindTexture`, etc.) is per-context
@@ -153,20 +153,20 @@ Access debug output:
 ```fsharp
 open Aardvark.Rendering.Vulkan
 
-// Step 1: Create or provide VkInstance and VkPhysicalDevice
-let instance = VkInstance(...)
-let physicalDevice = instance.EnumeratePhysicalDevices() |> Array.head
+// The usual way: the headless application creates instance, device and runtime
+let app = new HeadlessVulkanApplication(DebugLevel.Normal)
+let runtime = app.Runtime
 
-// Step 2: Create VkDevice
-let device = Device.Create(physicalDevice, ...)
+// By hand:
+// Step 1: Create the instance; the debug config (validation layers, messenger) lives here
+let instance = new Instance(DebugLevel.Normal, layers, extensions)
+let physicalDevice = instance.Devices |> DeviceChooserAuto(preferDedicated = true).Run
 
-// Step 3: Create runtime
+// Step 2: Create the device (extensions and features); it owns the VMA allocator and the pipeline cache
+let device = physicalDevice.CreateDevice(deviceExtensions, selectFeatures)
+
+// Step 3: Create the runtime (resource manager and debug output; the config comes from the device)
 let runtime = new Runtime(device)
-// Runtime initializes:
-// - VMA allocator
-// - Command pool(s)
-// - Descriptor pool(s)
-// - Validation layers (if debug)
 ```
 
 ### Device Selection
@@ -175,13 +175,12 @@ let runtime = new Runtime(device)
 
 ### Vulkan.Runtime Class Structure
 
-**Key members:**
-- `Device : VkDevice` - logical device
-- `PhysicalDevice : VkPhysicalDevice` - GPU properties
-- `GraphicsQueue : VkQueue` - main render queue
-- `Allocator : VmaAllocator` - Vulkan Memory Allocator
-- `DescriptorSetAllocator : ...` - reusable descriptor sets
-- `PipelineCache : VkPipelineCache` - compiled pipeline storage
+**Key members** (`src/Aardvark.Rendering.Vulkan/Runtime/Runtime.fs`):
+- `Device : Device` - the device wrapper (`PhysicalDevice`, `GraphicsFamily`, memory allocator, pipeline cache, `GetMemoryStatistics`)
+- `ResourceManager` - caches of prepared resources, descriptor sets and pipelines
+- `ContextLock` - the device token
+- `DebugConfig`, `ShaderCachePath`, `DeviceCount`
+- the `IRuntime` capability members (`SupportsShaderFloat64`, `SupportsUnboundedSamplerArrays`, ...)
 
 ### Vulkan Command Encoding
 
@@ -216,9 +215,7 @@ VKVM.vmBindIndexBuffer(...)
 VKVM.vmBindVertexBuffers(...)
 VKVM.vmDraw(...)  // unified interface for direct/indirect, indexed/non-indexed
 
-// VMA integration
-VKVM.vmaCreateBuffer(...)
-VKVM.vmaMappedMemory(...)
+// VMA (Vulkan Memory Allocator) is a separate binding: Vma.* in Aardvark.Rendering.Vulkan.Wrapper/VMA.fs
 ```
 
 **Key struct: DrawCall (union)**
@@ -273,22 +270,18 @@ NVIDIA drivers read a 32-byte value such as `dmat4` from a storage buffer 16 byt
 
 Vulkan caches `VkPipeline` objects (expensive to create):
 
-```fsharp
-// Pipeline state: (renderPass, layout, shaders, viewport, blend, rasterizer, ...)
-// Identical state reuses cached pipeline
-// VKVM + VkPipelineCache persist between frames
-```
+In memory, `ResourceManager.pipelineCache` shares a `VkPipeline` between all draws with the same program, render pass, vertex input, input assembly, rasterizer, color blend, depth/stencil and multisample state (plus the specialization, see below). On disk, the device's `VkPipelineCache` (`src/Aardvark.Rendering.Vulkan/Core/Device/PipelineCache.fs`) is loaded when the device is created and written when it is disposed, to `CachingProperties.CacheDirectory/Pipelines/{entryAssembly}_{deviceId}.pipeline_cache`; a file whose vendor, device, driver version or cache UUID differ is discarded.
 
 **Specialization constants** (`uniform?SpecializationConstant?Name`, see SG-PATTERNS.md) are part of the pipeline identity. A specialized pipeline is compiled on a background thread (`BackgroundSpecialization` in `src/Aardvark.Rendering.Vulkan/Management/ResourceManager.fs`); meanwhile the render object uses the unspecialized pipeline of the same state, which runs the shader with the constants' defaults. The compile works on a private snapshot of the create-infos, is tagged with the input versions, and its result is adopted only while those versions are still current; a failed compile keeps the fallback until an input changes.
 
 ### Debug Configuration
 
 ```fsharp
-let device = Device.Create(physicalDevice, enableValidation = true)
+let app = new HeadlessVulkanApplication(DebugLevel.Full)   // the config goes to the Instance
 // Enables:
-// - VK_LAYER_KHRONOS_validation layer
+// - VK_LAYER_KHRONOS_validation layer with the ValidationLayerConfig features
 // - VkDebugUtilsMessenger callbacks
-// - GPU-assisted validation (if available)
+// - GPU-assisted validation when ShaderBasedValidation = GpuAssisted (ValidationLayerConfig.Full)
 // - Warnings on incorrect usage
 ```
 
@@ -330,8 +323,8 @@ The environment variable `AARDVARK_VULKAN_LIBRARY` names the Vulkan library to l
 
 | Feature | GL | Vulkan |
 |---------|----|----|
-| Raytracing | ✗ | ✓ (VK_KHR_ray_tracing) |
-| Sparse Textures | ✗ | ✓ (VK_EXT_sparse_binding) |
+| Raytracing | ✗ | ✓ (VK_KHR_ray_tracing_pipeline, VK_KHR_acceleration_structure) |
+| Sparse Textures | ✗ | ✗ (`CreateSparseTexture` is not implemented on either backend) |
 | Conservative Rasterization | ✓ (NV ext) | ✓ |
 | Multi-queue | ✗ | ✓ |
 | Async Compute | ✗ | ✓ |
@@ -418,7 +411,7 @@ let surface2 = runtime.PrepareEffect(sig, effect, mode)
 let surface3 = runtime.PrepareEffect(sig, effect, mode2)
 ```
 
-**GL caching location:** `src/Aardvark.Rendering.GL/Management/ResourceCache.fs`
+**GL caching location:** `src/Aardvark.Rendering.GL/Resources/Shaders/Program.fs` (programs); `Management/ResourceCache.fs` is the generic resource cache
 
 **Vulkan caching location:** `src/Aardvark.Rendering.Vulkan/Management/ResourceManager.fs`
 
@@ -464,10 +457,10 @@ let runtime = new Runtime(DebugLevel.Full)
 
 **Vulkan specific:**
 ```fsharp
-let device = Device.Create(physicalDevice, enableValidation = true)
+let app = new HeadlessVulkanApplication(DebugLevel.Full)
 // Enables VK_LAYER_KHRONOS_validation
 // VkDebugUtilsMessenger callbacks
-// GPU-assisted validation (if Nvidia/AMD)
+// GPU-assisted validation (ValidationLayerConfig.Full sets ShaderBasedValidation = GpuAssisted)
 ```
 
 ### RenderDoc Integration
@@ -531,11 +524,9 @@ task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer f
 ```fsharp
 open Aardvark.Rendering.Vulkan
 
-// Manual device creation
-let instance = VkInstance(...)
-let physicalDevice = instance.EnumeratePhysicalDevices() |> Array.head
-let device = Device.Create(physicalDevice)
-let runtime = new Runtime(device)
+// Instance, device and runtime (see "Device Creation and Initialization")
+let app = new HeadlessVulkanApplication(DebugLevel.Normal)
+let runtime = app.Runtime
 
 // Rest same as GL (IRuntime is backend-agnostic)
 let fboSig = runtime.CreateFramebufferSignature(...)
@@ -555,9 +546,8 @@ let createRuntime (backend: BackendType) =
         let app = OpenGlApplication()
         app.Runtime :> IRuntime
     | Vulkan ->
-        let instance = VkInstance(...)
-        let device = Device.Create(...)
-        new Runtime(device) :> IRuntime
+        let app = new HeadlessVulkanApplication(DebugLevel.None)
+        app.Runtime :> IRuntime
 
 // Code using `runtime` works with both
 let runtime = createRuntime GL
@@ -632,17 +622,20 @@ Shader implications:
 
 ## 11. RuntimeConfig Reference
 
-Configure before creating any runtime:
+Two modules, `Aardvark.Rendering.GL.RuntimeConfig` and `Aardvark.Rendering.Vulkan.RuntimeConfig`; configure before creating a runtime:
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
-| `DepthRange` | `MinusOneToOne` | Depth buffer range (use `ZeroToOne` for reversed) |
-| `NumberOfResourceContexts` | 1 | Parallel resource creation contexts |
-| `AllowConcurrentResourceAccess` | false | Thread-safe resource access |
-| `SyncUploadsAndFrames` | true | Sync texture uploads with frames |
-| `SuppressSparseBuffers` | false | Disable sparse buffer extensions |
-| `UseNewRenderTask` | false | New render task implementation |
-| `PreferHostSideTextureCompression` | true | CPU-side texture compression |
+| `DepthRange` (both) | `MinusOneToOne` | Depth buffer range (`ZeroToOne` for reversed depth) |
+| `MajorVersion`, `MinorVersion` (GL) | 4.6 (4.1 on macOS) | First GL version to probe |
+| `NumberOfResourceContexts` (GL) | 2 | Parallel resource creation contexts |
+| `RobustContextSharing` (GL) | true | Serialize context creation for drivers with sharing problems |
+| `AllowConcurrentResourceAccess` (GL) | false | Thread-safe resource access |
+| `SyncUploadsAndFrames` (GL) | false | Sync texture uploads with frames |
+| `SuppressSparseBuffers` (GL) | false | Disable sparse buffer extensions |
+| `UsePixelBufferObjects` (GL) | true (false on macOS) | Upload textures through pixel buffer objects |
+| `PreferHostSideTextureCompression` (GL) | true | CPU-side texture compression |
+| `SuppressUpdateAfterBind` (Vulkan) | false | Disable update-after-bind descriptors |
 | `UnboundedArrayCapacity` (Vulkan) | 4096 | Capacity of an unbounded sampler or storage-buffer array, clamped to the device's per-stage limit; a longer array fails to bind. The clamped value is reported through `IRuntime.MaxUnbounded*ArrayElements` |
 
 ```fsharp

@@ -6,17 +6,17 @@ Index for AI coding assistants. Read only the doc you need.
 
 | Task | Document | Size |
 |------|----------|------|
-| ISg hierarchy, applicators, composition | SG-CORE.md | ~7 KB |
-| Semantic system, direct render path, picking cache contract, FShade, custom applicators | SG-SEMANTICS.md | ~11 KB |
-| Scene graph usage patterns, gotchas | SG-PATTERNS.md | ~6 KB |
+| ISg hierarchy, applicators, composition | SG-CORE.md | ~8 KB |
+| Semantic system, direct render path, picking cache contract, FShade, custom applicators | SG-SEMANTICS.md | ~12 KB |
+| Scene graph usage patterns, gotchas | SG-PATTERNS.md | ~11 KB |
 | GPU heap: many objects as a few indirect multi-draws | HEAP.md | ~7 KB |
-| IRuntime, resources, render objects, tasks | RENDER-CORE.md | ~11 KB |
+| IRuntime, resources, render objects, tasks, transparency | RENDER-CORE.md | ~15 KB |
 | Rendering usage patterns, offscreen, gotchas | RENDER-PATTERNS.md | ~8 KB |
-| OpenGL and Vulkan backends | BACKENDS.md | ~19 KB |
-| Debugging, shader printing, validation layers | DEBUG.md | ~17 KB |
+| OpenGL and Vulkan backends | BACKENDS.md | ~28 KB |
+| Debugging, shader printing, validation layers | DEBUG.md | ~18 KB |
 | Windowing, application layer, platforms | APPLICATION.md | ~16 KB |
-| Native C++ components (GLVM, VKVM) | NATIVE.md | ~14 KB |
-| Writing and registering tests | TESTING.md | ~6 KB |
+| Native C++ components (GLVM, VKVM) | NATIVE.md | ~15 KB |
+| Writing and registering tests | TESTING.md | ~11 KB |
 | Consumer project patterns | CONSUMER-PATTERNS.md | ~3 KB |
 | C# integration | CSHARP-INTEGRATION.md | ~3 KB |
 | Creating consumer project docs | TEMPLATE-CONSUMER.md | ~2 KB |

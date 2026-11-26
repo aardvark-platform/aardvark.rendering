@@ -33,13 +33,13 @@ open Aardvark.Application.Slim
 let app = new OpenGlApplication()
 
 // With debug and shader cache
-let app = new OpenGlApplication(debug = true, shaderCachePath = Some "cache/")
+let app = new OpenGlApplication(forceNvidia = false, debug = true, shaderCachePath = Some "cache/")
 
 // Force NVIDIA GPU on Windows (Optimus systems)
 let app = new OpenGlApplication(forceNvidia = true, debug = false)
 
 // Hide Cocoa menu bar on macOS
-let app = new OpenGlApplication(debug = false, hideCocoaMenuBar = true)
+let app = new OpenGlApplication(forceNvidia = true, debug = DebugLevel.None, shaderCachePath = Context.DefaultShaderCachePath, hideCocoaMenuBar = true)
 
 // Create window
 let win = app.CreateGameWindow(1024, 768)
@@ -48,8 +48,8 @@ win.Run()
 ```
 
 **Initialization sequence**:
-1. Probes OpenGL versions 4.6 → 3.3 by creating offscreen windows
-2. Queries `KHR_no_error` support if debug disabled
+1. Probes OpenGL versions from `RuntimeConfig.MajorVersion.MinorVersion` (4.6, or 4.1 on macOS) down to 3.3 by creating offscreen windows
+2. Queries `KHR_no_error` and debug-context support; a no-error context is used when `ErrorFlagCheck` is disabled
 3. Creates resource context (first window becomes parent)
 4. Installs OpenTK context delegate for GLFW interop
 
@@ -70,8 +70,10 @@ let app = new VulkanApplication(debug = false, extensions = extensions)
 
 // With device chooser
 let chooser = { new IDeviceChooser with
-    member _.Choose(devices) = devices |> Array.maxBy (fun d -> d.Limits.MaxImageDimension2D)
+    member _.Run(devices) = devices |> Array.maxBy (fun d -> d.Limits.Image.MaxDimension2D.X)
 }
+// an object expression bypasses the AARDVARK_VULKAN_DEVICE override and the cached choice;
+// derive from DeviceChooser and override Choose to keep both
 let app = new VulkanApplication(debug = false, deviceChooser = chooser)
 
 // Create window
@@ -83,12 +85,12 @@ win.Run()
 **Initialization sequence**:
 1. Aggregates surface extensions (`VK_KHR_surface`, platform variants, `VK_KHR_swapchain`)
 2. Creates Vulkan instance via `HeadlessVulkanApplication`
-3. Selects physical device (respects `deviceChooser`)
-4. Queries framebuffer sample count limits
+3. Selects the physical device (`deviceChooser`, default `DeviceChooserAuto(preferDedicated = true)`; see BACKENDS.md, Device Selection)
+4. Throws `NotSupportedException` when an instance extension GLFW requires is not enabled; sample-count limits are queried per window
 
 ## Slim Variants (GLFW)
 
-Cross-platform windowing via GLFW 3.x (Silk.NET.GLFW). Supports Windows, Linux, macOS.
+Cross-platform windowing via GLFW 3.x (Silk.NET.GLFW). Supports Windows, Linux, macOS. The GLFW `Window` implements `IRenderWindow`, the `IRenderControl` variant with a `Run` loop.
 
 ### Window Configuration
 
@@ -153,7 +155,7 @@ win.RenderAsFastAsPossible <- false
 // Continuous rendering
 win.RenderAsFastAsPossible <- true
 
-// VSync control
+// VSync control (OpenGL only; Vulkan vsync is a swapchain property)
 win.VSync <- true
 
 // GPU timing
@@ -199,7 +201,7 @@ if app.Instance.IsMainThread then
 ### Gamepad Support
 
 ```fsharp
-// Up to 15 simultaneous gamepads
+// Up to 16 simultaneous gamepads
 win.Gamepads |> AMap.toAVal |> AVal.map (fun gamepads ->
     gamepads |> HashMap.iter (fun id gamepad ->
         let pos = gamepad.LeftStick |> AVal.force
@@ -219,9 +221,9 @@ open Aardvark.Application.WPF
 <Border x:Name="renderControl" />
 
 // In code-behind
-let app = new OpenGlApplication()
+let app = new Aardvark.Application.WPF.OpenGlApplication()
 let ctrl = RenderControl()
-ctrl.Implementation <- OpenGlRenderControl(app.Runtime, samples = 8)
+app.Initialize(ctrl, samples = 8)   // creates the OpenGlRenderControl implementation
 ctrl.RenderTask <- renderTask
 renderControl.Child <- ctrl
 ```
@@ -232,9 +234,9 @@ renderControl.Child <- ctrl
 |------|----------|-----------|
 | `RenderControl` | Basic rendering | UI thread |
 | `ThreadedRenderControl` | Background rendering | Dedicated render thread |
-| `SharingRenderControl` | D3D/GL interop | UI thread with WGL_NV_DX_interop |
+| `OpenGlSharingRenderControl` | D3D/GL interop | UI thread with WGL_NV_DX_interop |
 
-**SharingRenderControl**: Best WPF integration, uses `WGL_NV_DX_interop` to share textures between Direct3D and OpenGL. Requires NVIDIA GPU.
+**OpenGlSharingRenderControl**: Best WPF integration, uses `WGL_NV_DX_interop` to share textures between Direct3D and OpenGL. Requires a driver with that extension; selected with `Config.useSharingControl`.
 
 ## WinForms Integration (Windows Only)
 
@@ -244,7 +246,8 @@ renderControl.Child <- ctrl
 open Aardvark.Application.WinForms
 
 let app = new OpenGlApplication()
-let ctrl = new OpenGlRenderControl(app.Runtime)
+let ctrl = new RenderControl()
+app.Initialize(ctrl, samples = 1)
 ctrl.RenderTask <- renderTask
 ctrl.Dock <- DockStyle.Fill
 form.Controls.Add(ctrl)
@@ -253,10 +256,11 @@ form.Controls.Add(ctrl)
 ### Vulkan
 
 ```fsharp
-open Aardvark.Application.WinForms.Vulkan
+open Aardvark.Application.WinForms
 
 let app = new VulkanApplication()
-let ctrl = new VulkanRenderControl(app.Runtime)
+let ctrl = new RenderControl()
+app.Initialize(ctrl, samples = 1)
 ctrl.RenderTask <- renderTask
 ctrl.Dock <- DockStyle.Fill
 form.Controls.Add(ctrl)
@@ -322,10 +326,10 @@ if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
     DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
 
 // Virtual key conversion for accurate keyboard mapping
-let key = Aardvark.Application.KeyConverter.keyFromVirtualKey scanCode
+let key = Aardvark.Application.KeyConverter.keyFromVirtualKey virtualKey
 ```
 
-**Window frame border**: Windows 10 has GLFW bug #539 (incorrect frame size reporting). Hardcoded workaround in `GLFW.fs:858-863`.
+**Window frame border**: Windows 10 has GLFW bug #539 (incorrect frame size reporting). Workaround in `getFrameBorder` (`GLFW.fs`), applied on Windows 10 only.
 
 ### macOS
 
@@ -337,16 +341,14 @@ let config = {
 }
 
 // Hide Cocoa menu bar
-let app = new OpenGlApplication(hideCocoaMenuBar = true)
+let app = new OpenGlApplication(forceNvidia = true, debug = DebugLevel.None, shaderCachePath = Context.DefaultShaderCachePath, hideCocoaMenuBar = true)
 
-// Content scale for mouse coordinates
-let scale = contentScale()  // V2d from glfwGetWindowContentScale
-let mousePos = rawPos * scale
+// Mouse coordinates are already multiplied by the window's content scale; no manual scaling
 ```
 
 **Limitations**:
 - Window icons silently ignored (cannot set on macOS)
-- `CocoaRetinaFramebuffer` hint required for retina support
+- The `CocoaRetinaFramebuffer` hint is set from `physicalSize`
 
 ### Linux
 
@@ -392,8 +394,10 @@ let main argv =
 open Aardvark.Application
 
 let cameraController =
-    DefaultCameraController.controlWSAD win.Keyboard win.Time
-    |> DefaultCameraController.withMouseControl (DefaultCameraController.controlLookAround win.Mouse)
+    AVal.integrate initialView win.Time [
+        DefaultCameraController.controlWSAD win.Keyboard win.Time
+        DefaultCameraController.controlLookAround win.Mouse
+    ]
 
 let camera =
     cameraController |> AVal.map (fun f ->
@@ -460,7 +464,7 @@ let view =
             return! DefaultCameraController.controlExt (float speed) win.Mouse win.Keyboard win.Time initialView
         | Orbit ->
             return! AVal.integrate initialView win.Time [
-                DefaultCameraController.controlZoomWithSpeed speed win.Mouse
+                DefaultCameraController.controlZoom win.Mouse   // controlZoomWithSpeed takes a cval<float>
                 DefaultCameraController.controlOrbitAround win.Mouse center
             ]
     }
@@ -469,7 +473,7 @@ let view =
 Available controllers:
 | Controller | Purpose |
 |------------|---------|
-| `control` | Basic free-fly (WASD + mouse look) |
+| `control` | Free-fly: WASD, mouse look, pan, zoom and scroll |
 | `controlExt speed` | Free-fly with speed parameter |
 | `controlOrbitAround` | Left-drag orbit around an adaptive world-space point |
 | `controlZoom` / `controlZoomWithSpeed` | Mouse wheel zoom |
@@ -483,7 +487,7 @@ For performance-critical applications, disable automatic rendering:
 
 ```fsharp
 // WinForms
-let glCtrl = new OpenGlRenderControl()
+let glCtrl = new OpenGlRenderControl(app.Runtime, debug = DebugLevel.None, samples = 1)
 glCtrl.OnPaintRender <- false      // Don't render on Paint
 glCtrl.AutoInvalidate <- false     // Don't auto-invalidate
 
@@ -504,33 +508,23 @@ When to use:
 - Custom frame pacing requirements
 - Avoiding unnecessary redraws
 
-Event converter flags for input handling:
-```fsharp
-let converter = WinFormEventConverter(
-    NoKeyRepeat,                          // Ignore held key repeats
-    DisableWinformsMenuKeyHandling,       // Prevent Alt key menu activation
-    ResetKeyEventsOnLostFocus,            // Clear key state on focus loss
-    ResetMouseEventsOnLeave               // Clear mouse state on leave
-)
-```
-
 ---
 
 ## Gotchas
 
 | # | Issue | Fix |
 |---|-------|-----|
-| 1 | SubSampling Not Implemented | Setting != 1.0 crashes; use OpenVR.Vulkan `adjustSize` instead |
+| 1 | SubSampling Not Implemented | The GLFW window fails for values other than 1.0; the OpenVR applications implement it through `AdjustSize` |
 | 2 | Main Thread Requirement | Use `app.Instance.Invoke` from background threads; GLFW requires main thread |
-| 3 | Context Sharing Breaks | Serialize WinForms/WPF control creation or set `RobustContextSharing = true` |
-| 4 | Retina/HiDPI Scaling | Three sizes: windowSize, physicalSize, framebufferSize; scale mouse coords on macOS |
-| 5 | OpenGL Version Probing | Probes 4.6→3.3; fails with no fallback if none supported |
+| 3 | Context Sharing Breaks | `RuntimeConfig.RobustContextSharing` (default true) serializes context creation; keep it on with multiple WinForms/WPF controls |
+| 4 | Retina/HiDPI Scaling | Three sizes: windowSize, physicalSize, framebufferSize; mouse coordinates are already scaled |
+| 5 | OpenGL Version Probing | Probes from `RuntimeConfig.MajorVersion.MinorVersion` (4.6, 4.1 on macOS) down to 3.3; fails if none is supported |
 | 6 | Swapchain Recreation | Every resize recreates swapchain (expensive); clamp resize frequency |
 | 7 | Incomplete Key Mappings | Equal, Menu, Brackets map to `Keys.None`; use `GetKeyName` workaround |
-| 8 | VSync Context Switch | VSync change makes context current; avoid frequent toggling |
+| 8 | VSync Context Switch | VSync applies to OpenGL only and makes the context current; avoid frequent toggling |
 | 9 | WPF Control Init Once | `Implementation` can only be set once; create new control for backend switch |
-| 10 | Win10 Frame Border Bug | GLFW #539; hardcoded workaround in GLFW.fs |
-| 11 | AutoInvalidate Performance | Default true = continuous redraws; set false for event-driven rendering |
+| 10 | Win10 Frame Border Bug | GLFW #539; workaround in `getFrameBorder` (GLFW.fs), Windows 10 only |
+| 11 | AutoInvalidate | Default true re-invalidates only while the task is still out of date; `RenderContinuously` is the continuous mode |
 
 ## See Also
 

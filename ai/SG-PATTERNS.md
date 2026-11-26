@@ -62,7 +62,7 @@ let triangle =
 ### IndexedGeometry
 
 ```fsharp
-let cube = IndexedGeometry.unitCube
+let cube = Primitives.unitBox
 
 let scene =
     Sg.ofIndexedGeometry cube
@@ -84,12 +84,12 @@ let trafos = AVal.constant [|
 |]
 
 let instances =
-    Sg.ofIndexedGeometry sphere
-    |> Sg.shader { do! DefaultSurfaces.trafo }
+    sphere                                  // IndexedGeometry
     |> Sg.instancedGeometry trafos
+    |> Sg.shader { do! DefaultSurfaces.trafo }
 ```
 
-Source: `src/Aardvark.SceneGraph/SgFSharp.fs:876`
+Source: `src/Aardvark.SceneGraph/SgFSharp.fs:899-911`
 
 ### Dynamic Scenes
 
@@ -168,38 +168,37 @@ Storage buffers (SSBOs) provide variable-length arrays in shaders. Access via `u
 ### Setup
 
 ```fsharp
-// 1. Create storage buffer
-let buffer : IBuffer = runtime.CreateBuffer(data)
+// 1. Create storage buffer (IBuffer<M44f>)
+let buffer = runtime.CreateBuffer(data : M44f[])
 
-// 2. Attach to scene graph
-sg |> Sg.uniform "ProjectedImagesLocalTrafos" buffer
+// 2. Attach to scene graph (a constant uniform; Sg.uniform takes an aval)
+sg |> Sg.uniform' "ProjectedImagesLocalTrafos" buffer
 ```
 
 ### Shader Access
 
 ```fsharp
+// one typed array member per buffer
 type UniformScope with
-    member x.StorageBuffer : Shader<Buffer<'T>> =
-        uniform?StorageBuffer
+    member x.ProjectedImagesLocalTrafos : M44f[] = uniform?StorageBuffer?ProjectedImagesLocalTrafos
 
 type Vertex = { [<Position>] p : V4d }
 
 let shaderWithStorageBuffer (v : Vertex) =
     fragment {
-        let trafos = uniform.StorageBuffer?ProjectedImagesLocalTrafos
-        let trafo = trafos.[index]
+        let trafo = uniform.ProjectedImagesLocalTrafos.[index]
         // Use trafo...
         return v.p
     }
 ```
 
 **Key points**:
-- `uniform?StorageBuffer?Name` retrieves `Buffer<'T>`
-- Index with `buffer.[i]` in shader code
-- Buffer type must match shader usage
+- `uniform?StorageBuffer?Name` declares a storage buffer; the member's array type is the element type
+- Index with `uniform.Name.[i]` in shader code
+- The buffer's element type must match the declared type
 - No compile-time length checks
 
-Source: FShade/Aardvark storage buffer conventions
+Source: `src/Aardvark.Rendering.GL/Runtime/GeometryPool.fs` (`uniform?StorageBuffer?Bounds`), `src/Tests/Aardvark.Rendering.Tests/Tests/Compute/Dispatch.fs`
 
 ## Unbounded Arrays in Shaders
 
@@ -247,12 +246,12 @@ let diffuseFragment (v : Vertex) =
 
 // Scene graph setup
 sg |> Sg.texture' DefaultSemantic.DiffuseColorTexture texture
-   |> Sg.uniform' "HasDiffuseTexture" true
+// Has<Name> uniforms are derived automatically from whether Name resolves to a texture,
+// uniform or attribute; nothing has to be set by hand
 ```
 
 **Efficiency**:
-- Branches compile to shader variants (static branching if possible)
-- No runtime cost when branch condition is uniform
+- The branch is a dynamic uniform branch in the shader; a `SpecializationConstant` (see below) folds it at pipeline compile time
 - Prefer over multiple shader effects when features overlap
 
 **Common use cases**:

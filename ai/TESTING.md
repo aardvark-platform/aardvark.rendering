@@ -165,6 +165,8 @@ Representative examples:
 - Mixed CPU/GPU selection: `Tests/Buffer/ManagedBuffer.fs`
 - Parameterized cases: `Tests/Rendering/SceneGraph/Picking.fs`
 - Dotted group/case names: `Tests/Texture/Compression.fs`
+- Vulkan-only GPU groups built from probe functions: `Tests/Rendering/Heap/` (needs descriptor indexing)
+- Transparency pass tests on both backends: `Tests/Rendering/Transparency.fs`
 
 ## Environment Variables
 
@@ -178,6 +180,9 @@ EnvVar.SOME_SWITCH <- "1"
 try run ()
 finally EnvVar.SOME_SWITCH <- null
 ```
+
+A group that overrides the same switch in several cases also resets it before each case, so a
+value left behind by an aborted case cannot leak in (see `Tests/Rendering/Heap/Gauntlet.fs`).
 
 ## Leak Checks
 

@@ -39,7 +39,7 @@ ro.Surface <- Surface.Effect effect
 ro.VertexAttributes <- attributes
 
 // Compile and render
-let task = runtime.CompileRender(fboSignature, ASet.ofList [ro])
+let task = runtime.CompileRender(fboSignature, ASet.ofList [ro :> IRenderObject])
 task.Update(AdaptiveToken.Top, RenderToken.Empty)
 task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
 ```
@@ -74,7 +74,7 @@ ro.Surface <- Surface.Effect effect
 
 ```fsharp
 // Changeable render object set
-let renderObjects = cset [ro1; ro2; ro3]
+let renderObjects = cset<IRenderObject> [ro1; ro2; ro3]
 
 // Compile task (updates automatically)
 let task = runtime.CompileRender(fboSignature, renderObjects)
@@ -100,15 +100,15 @@ let tex = runtime.CreateTexture(size, TextureDimension.Texture2D,
 
 // Upload from PixImage
 let img = PixImage<byte>(Col.Format.RGBA, size.XY)
-runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| img |], TextureParams.empty))
+runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| img |], TextureParams.None))
 
 // Upload to specific level/slice
 let tensor = NativeTensor4<byte>(...)
-runtime.Upload(tex.[0, 0], tensor, Col.Format.RGBA, V3i.Zero, size)
+runtime.Upload(tex.[TextureAspect.Color, 0, 0], tensor, Col.Format.RGBA, V3i.Zero, size)
 
 // Download
 let result = NativeTensor4<byte>(size.XYI, 4L)
-runtime.Download(tex.[0, 0], result, Col.Format.RGBA, V3i.Zero, size)
+runtime.Download(tex.[TextureAspect.Color, 0, 0], result, Col.Format.RGBA, V3i.Zero, size)
 ```
 
 ### Framebuffer Creation
@@ -142,7 +142,7 @@ let fbo = runtime.CreateFramebuffer(signature, attachments)
 ```fsharp
 // Define compute shader (FShade)
 let computeShader =
-    FShade.ComputeShader.ofFunction V3i(16, 16, 1) <| fun () ->
+    FShade.ComputeShader.ofFunction (V3i(16, 16, 1)) <| fun () ->
         compute {
             let id = getWorkGroupId()
             // ... shader code
@@ -195,7 +195,8 @@ Key APIs:
 | API | Purpose |
 |-----|---------|
 | `runtime.CreateFramebufferSignature` | Define render target formats |
-| `Sg.compile runtime signature` | Scene graph to IRenderTask |
+| `Sg.compile runtime signature` | Scene graph to IRenderTask (`Transparency.Auto`) |
+| `Sg.compile' runtime signature transparency` | Same with an explicit `Transparency` |
 | `RenderTask.renderToColor` | Single color output |
 | `RenderTask.renderToColorAndDepth` | Color + depth outputs |
 | `RenderTask.renderToColorAndDepthWithClear` | With clear values |
@@ -208,16 +209,15 @@ For planetary/astronomical scales, avoid floating-point precision loss:
 // WRONG: Large coordinates cause jitter
 let scene = objects |> Sg.trafo (Trafo3d.Translation(largeOffset))
 
-// CORRECT: Offset geometry to origin, apply inverse as trafo
-let offset = AVal.map (fun objs -> Trafo3d.Translation(objs.[0].Position)) objects
+// CORRECT: Offset geometry to the origin, apply the offset as the model trafo
+let offset = objects |> AVal.map (fun objs -> Trafo3d.Translation(objs.[0].Position))
 
 let scene =
-    objects
-    |> AVal.map (fun objs offset ->
-        objs |> Array.map (fun o -> o.TransformedBy(offset.Inverse))
-    )
+    AVal.map2 (fun objs (offset : Trafo3d) ->
+        objs |> Array.map (fun o -> o.TransformedBy(offset.Inverse)) |> buildSg
+    ) objects offset
     |> Sg.dynamic
-    |> Sg.trafo offset  // Re-applies offset in shader with higher precision
+    |> Sg.trafo offset
 ```
 
 Tips:
@@ -230,11 +230,11 @@ Tips:
 | # | Issue | Fix |
 |---|-------|-----|
 | 1 | Missing Acquire/Release | Pair `Acquire()` with `Release()` in try/finally; leaks GPU memory otherwise |
-| 2 | Wrong AdaptiveToken | Pass token through `GetValue(token)`, don't create new `AdaptiveToken.Top` |
+| 2 | Wrong AdaptiveToken | Pass the token through `GetValue(token, renderToken)`, don't create a new `AdaptiveToken.Top` |
 | 3 | Thread/Context Safety | Use `runtime.ContextLock` before GL/Vulkan calls |
 | 4 | Framebuffer Signature Mismatch | RenderObject must match signature (attachments, formats, samples) |
 | 5 | Mip Level Size | Size at level n = `size / 2^n`; use `tex.GetSize(n)` for uploads |
-| 6 | Empty DrawCalls Array | `DrawCalls.Direct [||]` renders nothing silently |
+| 6 | Empty DrawCalls Array | `DrawCalls.Direct (AVal.constant [||])` renders nothing silently |
 | 7 | RenderObject.Id Collision | Use `RenderObject.Clone(ro)` for new ID, not `RenderObject(ro)` |
 | 8 | Activate Not Disposed | `Activate` must return `IDisposable` that releases resources |
 | 9 | TextureAspect Mismatch | Aspect must match format (can't get depth from color texture) |

@@ -16,9 +16,9 @@ GLVM (OpenGL Virtual Machine) is a native C++ library providing instruction-base
 
 | Component | Description | Location |
 |-----------|-------------|----------|
-| Fragment | Linked list of instruction blocks (vector<vector<Instruction>>) | `src/GLVM/glvm.h:223-226` |
-| Instruction | Opcode + 6 intptr_t arguments | `src/GLVM/glvm.h:212-220` |
-| InstructionCode | Enum of 57+ GL commands (BindVertexArray, DrawElements, etc.) | `src/GLVM/glvm.h:127-202` |
+| Fragment | Linked list of instruction blocks (vector<vector<Instruction>>) | `src/GLVM/glvm.h:223-227` |
+| Instruction | Opcode + 6 intptr_t arguments | `src/GLVM/glvm.h:212-221` |
+| InstructionCode | C++ enum of 57+ GL commands (BindVertexArray, DrawElements, etc.); the F# side passes the raw opcode | `src/GLVM/glvm.h:127-203` |
 
 **Execution Modes:**
 
@@ -54,8 +54,8 @@ let frag = GLVM.vmCreate()
 let block = GLVM.vmNewBlock(frag)
 
 // Encode instructions
-GLVM.vmAppend1(frag, block, int InstructionCode.BindVertexArray, nativeint vaoHandle)
-GLVM.vmAppend1(frag, block, int InstructionCode.BindProgram, nativeint programId)
+GLVM.vmAppend1(frag, block, 1, nativeint vaoHandle)   // 1 = BindVertexArray in glvm.h (no F# enum)
+GLVM.vmAppend1(frag, block, 2, nativeint programId)   // 2 = BindProgram
 
 // Execute with redundancy checks
 let mutable stats = Unchecked.defaultof<VMStats>
@@ -83,10 +83,12 @@ VKVM (Vulkan Virtual Machine) provides helper functions for Vulkan resource bind
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `vmBindDescriptorSets` | `(VkCommandBuffer, DescriptorSetBinding*)` | Binds descriptor set array |
-| `vmBindIndexBuffer` | `(VkCommandBuffer, IndexBufferBinding*)` | Binds index buffer + offset + type |
-| `vmBindVertexBuffers` | `(VkCommandBuffer, VertexBufferBinding*)` | Binds vertex buffer arrays + offsets |
-| `vmDraw` | `(VkCommandBuffer, RuntimeStats*, int*, DrawCall*)` | Unified draw (direct/indirect, indexed/non-indexed) |
+| `vmBindDescriptorSets` | `(const VKVM*, VkCommandBuffer, DescriptorSetBinding*)` | Binds descriptor set array |
+| `vmBindIndexBuffer` | `(const VKVM*, VkCommandBuffer, IndexBufferBinding*)` | Binds index buffer + offset + type |
+| `vmBindVertexBuffers` | `(const VKVM*, VkCommandBuffer, VertexBufferBinding*)` | Binds vertex buffer arrays + offsets |
+| `vmDraw` | `(const VKVM*, VkCommandBuffer, RuntimeStats*, int*, DrawCall*)` | Unified draw (direct/indirect, indexed/non-indexed) |
+
+These helpers are internal to the library and reached through the command encoding; only `vmInit`, `vmFree` and `vmRun` are exported.
 
 **DrawCall Union** (`src/VKVM/vkvm.h:27-39`):
 
@@ -136,7 +138,7 @@ type DrawCall =
 - 44+ Vulkan command types: CmdBindPipeline, CmdDraw, CmdDispatch, CmdCopyBuffer, CmdPipelineBarrier, etc.
 - Commands stored as length-prefixed structs: `{ uint32_t Length; CommandType OpCode; ...args }`
 - `CommandFragment` linked list for chaining
-- `vmRun(VkCommandBuffer, CommandFragment*)` executes fragment
+- `vmRun(const VKVM*, VkCommandBuffer, CommandFragment*)` executes a fragment (F#: `vmRun(nativeint vkvm, VkCommandBuffer, CommandFragment*)`)
 
 **VMA Integration** (`src/VKVM/vma.cpp`):
 - Single-file VMA implementation (`#define VMA_IMPLEMENTATION`)
@@ -170,7 +172,7 @@ type DrawCall =
 
 **Build Process:**
 1. Delete `build/` directory
-2. Configure CMake Release build
+2. Configure CMake (Release on Windows via `build.cmd`, MinSizeRel on Unix via `build.sh`)
 3. Build with platform toolchain (MSVC, GCC, Clang)
 4. Install to `lib/Native/{component}/{os}/{arch}/`
 
@@ -181,12 +183,14 @@ string(REGEX REPLACE "\n$" "" ARCH "${ARCH}")
 string(REGEX REPLACE "x86_64" "AMD64" ARCH "${ARCH}")
 ```
 
+`ARCH` is derived from `uname -m` on Unix and fixed to `AMD64` on Windows; `-DARCH=...` on the command line is overwritten, so another architecture needs an edit of `CMakeLists.txt`.
+
 ### CI Workflows
 
 | Workflow | File | Trigger | Platforms | Output |
 |----------|------|---------|-----------|--------|
 | GLVM | `.github/workflows/glvm.yml` | `workflow_dispatch` | windows-2022, ubuntu-22.04, macos-15-intel, macos-14 | PR: "[GLVM] Update native libraries" |
-| VKVM | `.github/workflows/vkvm.yml` | `workflow_dispatch` | windows-2022, ubuntu-22.04, macos-15-intel, macos-14 | PR: "[VKVM] Update native libraries" |
+| VKVM | `.github/workflows/vkvm.yml` | `workflow_dispatch` | windows-2022, ubuntu-22.04, macos-15-intel, macos-15 (Vulkan SDK pinned to 1.4.309.0 on macOS, `latest` elsewhere) | PR: "[VKVM] Update native libraries" |
 
 ---
 
@@ -323,7 +327,7 @@ binding.Dispose()  // Free native memory
 
 | Platform | Tool | Command |
 |----------|------|---------|
-| Windows | WinDbg/VS Debugger | PDBs generated in Debug builds (`glvm.pdb`, `vkvm.pdb`) |
+| Windows | WinDbg/VS Debugger | `glvm.pdb` ships with the Release build in `lib/Native/Aardvark.Rendering.GL/windows/AMD64/`; there is no `vkvm.pdb` |
 | Linux | GDB | `gdb --args dotnet MyApp.dll` |
 | macOS | LLDB | `lldb -- dotnet MyApp.dll` |
 | Cross-platform | printf | Enable trace macros in `glvm.cpp:52-53` (`#define trace(a) { printf(a); }`) |
@@ -336,14 +340,14 @@ binding.Dispose()  // Free native memory
 |---|-------|-----|
 | 1 | GL Context Requirement | `vmInit()` requires active GL context; call after `glfwMakeContextCurrent` |
 | 2 | Multi-Context VAO | VAOs are context-specific; call `hglCleanup(ctx)` on context destroy |
-| 3 | State Cache Leaks | External GL calls bypass GLVM cache; use `VMMode.NoOptimization` or separate fragments |
+| 3 | State Cache Leaks | External GL calls bypass GLVM cache; use `VMMode.None` or separate fragments |
 | 4 | Missing Extensions | Fallback to slow loops (10-100x slower); check `glMultiDrawArraysIndirect != nullptr` |
-| 5 | Vulkan SDK Version | Pin version in CMakeLists.txt; CI uses latest, local may differ |
-| 6 | Union Layout | `sizeof(DrawCall)` must be 16 bytes; verify with static_assert |
+| 5 | Vulkan SDK Version | Nothing is pinned in CMakeLists.txt; CI uses `latest` on Windows and Linux and 1.4.309.0 on macOS, so a local build may use another SDK |
+| 6 | Union Layout | `sizeof(DrawCall)` is 32 bytes on 64-bit; the F# `FieldOffset`s in `VKVM.fs` must match |
 | 7 | VMA Debug Logging | Disabled in Release; enable `VMA_DEBUG_LOG_FORMAT` or use validation layers |
-| 8 | CMake Arch Detection | May fail on RISC-V/PowerPC; manually set `cmake -DARCH=AMD64` |
-| 9 | Static CRT (Windows) | Mixing static/dynamic CRT causes heap corruption; use `MultiThreadedDLL` |
-| 10 | P/Invoke Convention | Always specify `CallingConvention.Cdecl`; default `StdCall` causes stack corruption |
+| 8 | CMake Arch Detection | Derived from `uname -m`; unknown architectures need an edit of `CMakeLists.txt` (`-DARCH` is overwritten) |
+| 9 | Static CRT (Windows) | Both libraries use the static CRT (`MultiThreaded`) on purpose, so they do not depend on a redistributable |
+| 10 | P/Invoke Convention | On x64 and ARM64 there is only one convention; the VKVM bindings omit `CallingConvention`, GLVM states `Cdecl` |
 
 ---
 

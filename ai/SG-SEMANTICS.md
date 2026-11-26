@@ -12,7 +12,8 @@ Scene graphs use **attribute grammars** (Aardvark.Base.Ag) for evaluation.
 
 | Attribute | Type | Direction | Purpose |
 |-----------|------|-----------|---------|
-| `ModelTrafo` | `aval<Trafo3d>` | Synthesized | Accumulated model transformation |
+| `ModelTrafoStack` | `list<aval<Trafo3d>>` | Inherited | Model transformations from the root down |
+| `ModelTrafo` | `aval<Trafo3d>` | Synthesized | Accumulated model transformation (folded from the stack) |
 | `ViewTrafo` | `aval<Trafo3d>` | Inherited | View transformation |
 | `ProjTrafo` | `aval<Trafo3d>` | Inherited | Projection transformation |
 | `Surface` | `Surface` | Inherited | Shader effects |
@@ -20,7 +21,7 @@ Scene graphs use **attribute grammars** (Aardvark.Base.Ag) for evaluation.
 | `VertexAttributes` | `Map<Symbol, BufferView>` | Inherited | Vertex data |
 | `InstanceAttributes` | `Map<Symbol, BufferView>` | Inherited | Instance data |
 | `VertexIndexBuffer` | `Option<BufferView>` | Inherited | Index buffer |
-| `FaceVertexCount` | `aval<int>` | Synthesized | Vertex count |
+| `FaceVertexCount` | `aval<int>` | Inherited | Vertex count (seeded at the root, overridden by attribute and index applicators) |
 | `BlendMode`, `DepthTest`, etc. | Various | Inherited | Render state |
 
 Source: `src/Aardvark.SceneGraph/Semantics/`
@@ -31,7 +32,7 @@ Defined with `[<Rule>]` attribute:
 
 ```fsharp
 [<Rule>]
-type TrafoSem() =
+type Trafos() =
     // Inherited: propagate trafo stack to child
     member x.ModelTrafoStack(t : Sg.TrafoApplicator, scope : Ag.Scope) =
         t.Child?ModelTrafoStack <- t.Trafo::scope.ModelTrafoStack
@@ -88,7 +89,9 @@ type RenderObjectSem() =
     // RenderNode: create RenderObject from scope state
     member x.RenderObjects(r : Sg.RenderNode, scope : Ag.Scope) : aset<IRenderObject> =
         let rj = RenderObject.ofScope scope
-        rj.DrawCalls <- DrawCalls.Direct r.DrawCallInfo
+        // simplified: the real rule wraps the call in an array and falls back to
+        // scope.FaceVertexCount when its FaceVertexCount is negative
+        rj.DrawCalls <- DrawCalls.Direct (r.DrawCallInfo |> AVal.map Array.singleton)
         rj.Mode <- r.Mode
         ASet.single (rj :> IRenderObject)
 ```
@@ -201,7 +204,7 @@ let effects = [|
 sg |> Sg.effectPool effects activeEffectIndex
 ```
 
-Source: `src/Aardvark.SceneGraph/SgFSharp.fs:782-797`
+Source: `src/Aardvark.SceneGraph/SgFSharp.fs:796-811`
 
 ### Surface Types
 
@@ -209,6 +212,8 @@ Source: `src/Aardvark.SceneGraph/SgFSharp.fs:782-797`
 |---------|---------|
 | `Surface.Effect effect` | FShade effect |
 | `Surface.None` | No shader |
+| `Surface.Dynamic` | Surface created per signature and topology (`Sg.effectPool`) |
+| `Surface.Backend` | A pre-compiled `IBackendSurface` |
 
 Applied via `SurfaceApplicator`, propagates down tree.
 

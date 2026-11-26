@@ -20,7 +20,7 @@ Source: `src/Aardvark.SceneGraph/Core/Core.fs`
 
 | Type | Purpose | Key Properties |
 |------|---------|----------------|
-| `RenderNode` | Basic draw call | `DrawCallInfo`, `Mode : IndexedGeometryMode` |
+| `RenderNode` | Basic draw call | `DrawCallInfo : aval<DrawCallInfo>`, `Mode : IndexedGeometryMode` |
 | `IndirectRenderNode` | GPU-driven rendering | `Indirect : aval<IndirectBuffer>`, `Mode` |
 | `RenderObjectNode` | Pre-built objects | `Objects : aset<IRenderObject>` |
 | `DelayNode` | Lazy generation | `Generator : Ag.Scope -> ISg` |
@@ -182,7 +182,7 @@ sg |> Sg.viewport (AVal.constant (Box2i(V2i.Zero, V2i(1920, 1080))))
 sg |> Sg.onOff isVisible
 
 // Dynamic scene graph
-sg |> Sg.dynamic currentScene
+Sg.dynamic currentScene   // currentScene : aval<ISg>
 
 // Activation hooks
 sg |> Sg.onActivation (fun () ->
@@ -227,7 +227,7 @@ Scene graphs compose left-to-right using `|>`:
 
 ```fsharp
 let scene =
-    IndexedGeometry.unitCube
+    Primitives.unitBox
     |> Sg.ofIndexedGeometry
     |> Sg.shader {
         do! DefaultSurfaces.trafo

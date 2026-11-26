@@ -20,6 +20,7 @@ F# uses `aval<'T>`, C# uses equivalent types from `CSharp.Data.Adaptive`:
 
 ```csharp
 using FSharp.Data.Adaptive;
+using CSharp.Data.Adaptive;
 
 // Create mutable adaptive value
 var position = new ChangeableValue<V3d>(V3d.Zero);
@@ -56,10 +57,11 @@ var count = items.MapToValue(s => s.Count);
 
 ## Scene Graph in C#
 
-Use extension methods from `Aardvark.SceneGraph`:
+Use the extension methods from the namespace `Aardvark.SceneGraph.CSharp`:
 
 ```csharp
 using Aardvark.SceneGraph;
+using Aardvark.SceneGraph.CSharp;
 using Aardvark.Rendering;
 
 var box = Sg.box(
@@ -69,10 +71,9 @@ var box = Sg.box(
 
 var sg = box
     .Trafo(transform)
-    .Shader(DefaultSurfaces.trafo)
-    .Shader(DefaultSurfaces.vertexColor);
+    .Surface(DefaultSurfaces.trafo, DefaultSurfaces.vertexColor);
 
-var task = sg.Compile(runtime, signature);
+var task = runtime.CompileRender(signature, sg);
 ```
 
 ### Common Extension Methods
@@ -80,17 +81,16 @@ var task = sg.Compile(runtime, signature);
 | Method | Purpose |
 |--------|---------|
 | `.Trafo(aval)` | Apply transformation |
-| `.Shader(effect)` | Add shader effect |
-| `.Uniform(name, aval)` | Set uniform value |
-| `.DiffuseTexture(aval)` | Set diffuse texture |
-| `.Compile(runtime, sig)` | Compile to render task |
+| `.Surface(effect)`, `.Surface(params effects)`, `.WithEffects(seq)` | Add shader effects |
+| `.Uniform(symbol, aval)` | Set uniform value (`Symbol` or `TypedSymbol` name) |
+| `runtime.CompileRender(signature, sg)` | Compile to render task (extension in `Aardvark.SceneGraph`) |
 
 ## Interop with F# Rendering
 
 C# application code can:
 - Create adaptive values consumed by F# scene graphs
 - Call F# rendering modules directly
-- Use extension methods from `Aardvark.SceneGraph`
+- Use extension methods from `Aardvark.SceneGraph.CSharp`
 
 F# rendering code handles:
 - Shader compilation (FShade)
@@ -133,7 +133,7 @@ Application.Current.Dispatcher.Invoke(() =>
 | Symptom | Fix |
 |---------|-----|
 | `FSharp.Core` version conflict | Ensure consistent version across projects |
-| Missing extension methods | Add `using Aardvark.SceneGraph;` |
+| Missing extension methods | Add `using Aardvark.SceneGraph.CSharp;` (and `using CSharp.Data.Adaptive;` for adaptive helpers) |
 | Adaptive values not updating | Verify `Transact()` wraps changes |
 | Null reference in F# interop | Use `FSharpOption` for optional values |
 

@@ -9,13 +9,13 @@ Backend-agnostic rendering interfaces implemented by OpenGL and Vulkan backends.
 | `IRuntime` | Top-level interface, composes all runtime capabilities |
 | `IFramebufferRuntime` | Framebuffer, texture, renderbuffer creation and management |
 | `ITextureRuntime` | Texture operations: upload, download, copy, blit, mipmaps |
-| `IBufferRuntime` | Buffer operations: create, upload, download, copy |
+| `IBufferRuntime` | Buffer operations: create, upload, download (also async), copy (single and multi-region), mapped pointers |
 | `IComputeRuntime` | Compute shader compilation and execution |
 | `IQueryRuntime` | GPU queries: occlusion, timing, pipeline statistics |
 | `IRaytracingRuntime` | Raytracing pipelines and acceleration structures (Vulkan only) |
 | `ILodRuntime` | Level-of-detail rendering support |
 
-**Inheritance chain:** `IRuntime` -> `IFramebufferRuntime` -> `ITextureRuntime` -> `IBufferRuntime`
+**Inheritance chain:** `IRuntime` -> `IFramebufferRuntime` -> `ITextureRuntime` -> `IBufferRuntime`; `IRuntime` also inherits `IComputeRuntime`, `IQueryRuntime`, `IRaytracingRuntime` and `ILodRuntime`
 
 ### Key IRuntime Methods
 
@@ -24,7 +24,7 @@ PrepareEffect(signature, effect, topology) -> IBackendSurface
 PrepareRenderObject(signature, renderObject) -> IPreparedRenderObject
 CompileRender(signature, renderObjects) -> IRenderTask
 CompileClear(signature, clearValues) -> IRenderTask
-CreateFramebufferSignature(colorAttachments, depthAttachment, samples, layers) -> IFramebufferSignature
+CreateFramebufferSignature(colorAttachments, depthAttachment, ?samples, ?layers, ?perLayerUniforms) -> IFramebufferSignature   // IFramebufferRuntime; samples = 1, layers = 1
 CreateFramebuffer(signature, attachments) -> IFramebuffer
 ```
 
@@ -51,7 +51,7 @@ let runtime = new Runtime(device)
 |------|---------|---------|
 | `IBuffer` | Marker interface | (empty) |
 | `INativeBuffer` | Native memory buffer | `SizeInBytes`, `Use(action)` |
-| `IBackendBuffer` | GPU buffer resource | `Runtime`, `Handle`, `Name`, `Offset`, `SizeInBytes` |
+| `IBackendBuffer` | GPU buffer resource; inherits `IBufferRange`, so a whole buffer is a range | `Runtime`, `Handle`, `Name` (+ `Buffer`, `Offset`, `SizeInBytes`) |
 | `IBufferRange` | Buffer sub-range | `Buffer`, `Offset`, `SizeInBytes` |
 
 A range that is not itself a backend buffer is bound as a sub-range on Vulkan: storage descriptors get its offset and size, vertex bindings its offset. GL binds buffers whole and rejects a range that does not cover its entire buffer, for storage, vertex and index buffers alike; a typed `Buffer<'T>` over a whole buffer is accepted.
@@ -73,7 +73,7 @@ Describes how buffer elements are accessed.
 - `Device` - GPU-local, occasional host access
 - `Host` - CPU-visible, frequent host access
 
-**BufferUsage flags:** `Index`, `Indirect`, `Vertex`, `Uniform`, `Storage`, `Read`, `Write`, `AccelerationStructure`
+**BufferUsage flags:** `None`, `Index`, `Indirect`, `Vertex`, `Uniform`, `Storage`, `Read`, `Write` (`ReadWrite`), `AccelerationStructure`, `All` (the default of `CreateBuffer`)
 
 **AdaptiveBuffer:** `Resize` marks the buffer outdated in a transaction. `ResizeInPlace` only records the new size, which the next handle computation or write applies, and exists for subclasses that grow the buffer from inside their own `Compute` override, where marking is not allowed.
 
@@ -90,7 +90,7 @@ Describes how buffer elements are accessed.
 | `ITextureRange` | `Texture`, `Aspect`, `Levels`, `Slices` |
 | `ITextureSubResource` | Combines `ITextureSlice` and `ITextureLevel` |
 
-**TextureAspect:** `Color`, `Depth`, `Stencil`
+**TextureAspect:** `None`, `Color`, `Depth`, `Stencil`, `DepthStencil`
 
 ### IFramebuffer Types
 
@@ -115,11 +115,16 @@ type IFramebuffer =
 Resources use manual ref-counting via `Acquire/Release`:
 
 ```fsharp
-// IAdaptiveResource interface
-type IAdaptiveResource<'T> =
-    inherit IAdaptiveValue<'T>
+// IAdaptiveResource interfaces
+type IAdaptiveResource =
+    inherit IAdaptiveValue
     abstract member Acquire : unit -> unit
     abstract member Release : unit -> unit
+    abstract member ReleaseAll : unit -> unit
+
+type IAdaptiveResource<'T> =
+    inherit IAdaptiveResource
+    inherit IAdaptiveValue<'T>
     abstract member GetValue : AdaptiveToken * RenderToken -> 'T
 
 // Usage
@@ -173,7 +178,7 @@ Encapsulates all state for a draw call.
 | `InstanceAttributes` | `IAttributeProvider` | Per-instance attributes |
 | `VertexAttributes` | `IAttributeProvider` | Per-vertex attributes |
 | `Uniforms` | `IUniformProvider` | Shader uniforms |
-| `Activate` | `unit -> IDisposable` | Per-frame activation callback |
+| `Activate` | `unit -> IDisposable` | Called once when the object is prepared; the handle is disposed with the prepared object |
 
 ### Render Object Kinds
 
@@ -233,9 +238,10 @@ type Surface =
 ### DrawCalls
 
 ```fsharp
+[<RequireQualifiedAccess>]
 type DrawCalls =
-    | Direct of calls:aval<DrawCallInfo[]>
-    | Indirect of buffer:aval<IndirectBuffer>
+    | Direct of aval<DrawCallInfo[]>
+    | Indirect of aval<IndirectBuffer>
 ```
 
 ## Render Tasks
@@ -283,12 +289,15 @@ task.Use(fun () ->
 
 | Type | Purpose |
 |------|---------|
-| `AdaptiveRenderTask` | Renders adaptive set of objects |
-| `AListRenderTask` | Renders ordered list |
+| `AdaptiveRenderTask` | Runs an adaptively changing task (`aval<IRenderTask>`) |
+| `AListRenderTask` | Runs an ordered list of tasks (`alist<IRenderTask>`) |
 | `SequentialRenderTask` | Chains multiple tasks |
 | `CustomRenderTask` | User-defined behavior |
-| `ClearTask` | Framebuffer clearing |
-| `EmptyRenderTask` | No-op placeholder |
+| `BeforeAfterRenderTask` | Runs callbacks around a task |
+| `FinalizerRenderTask` | Disposes resources with the task |
+| `TransparencyRenderTask.create` | Wraps a set of objects with the transparency pass (see Transparency) |
+| `EmptyRenderTask.Instance` | No-op placeholder (private constructor) |
+| `runtime.CompileClear` | Framebuffer clearing (the clear task types are backend-internal) |
 
 ## Providers
 
@@ -298,6 +307,7 @@ Supplies shader uniforms by name.
 
 ```fsharp
 type IUniformProvider =
+    inherit IDisposable
     abstract member TryGetUniform : scope:Ag.Scope * name:Symbol -> IAdaptiveValue voption
 
 // Create from map
@@ -317,6 +327,7 @@ Supplies vertex/instance attributes by name.
 
 ```fsharp
 type IAttributeProvider =
+    inherit IDisposable
     abstract member All : seq<Symbol * BufferView>
     abstract member TryGetAttribute : name:Symbol -> BufferView voption
 
