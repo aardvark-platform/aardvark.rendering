@@ -47,13 +47,15 @@ module SgPrimitives =
             |]
 
         let private subdivide (tris : Triangle3d[]) =
-            [|
-                for t in tris do
-                    let mid = 0.5 * (t.P0 + t.P1) |> Vec.normalize
-
-                    yield Triangle3d(t.P1, t.P2, mid)
-                    yield Triangle3d(t.P2, t.P0, mid)
-            |]
+            let count = Checked.(*) 2 tris.Length
+            let result = if count = 0 then Array.empty else Array.zeroCreate<Triangle3d> count
+            let mutable i = 0
+            for t in tris do
+                let mid = 0.5 * (t.P0 + t.P1) |> Vec.normalize
+                result.[i] <- Triangle3d(t.P1, t.P2, mid)
+                result.[i + 1] <- Triangle3d(t.P2, t.P0, mid)
+                i <- i + 2
+            result
 
         let private sphereGeometry (tris : Triangle3d[]) =
             let positions : V3f[] = Array.zeroCreate (3 * tris.Length)

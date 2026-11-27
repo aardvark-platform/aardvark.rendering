@@ -149,6 +149,102 @@ module Sphere =
             Expect.equal (coords g).Length count $"{context}: texture coordinates"
             Expect.equal (colors g) (Array.create count color) $"{context}: colors"
 
+        let private subdivide =
+            let typ = typeof<ISg>.Assembly.GetType("Aardvark.SceneGraph.SgPrimitives+Sphere", true)
+            let method = typ.GetMethod("subdivide", Reflection.BindingFlags.Static ||| Reflection.BindingFlags.Public ||| Reflection.BindingFlags.NonPublic)
+            method.CreateDelegate(typeof<Func<Triangle3d[], Triangle3d[]>>) :?> Func<Triangle3d[], Triangle3d[]>
+
+        let private referenceSubdivision (triangles : Triangle3d[]) =
+            [| for triangle in triangles do
+                let midpoint = 0.5 * (triangle.P0 + triangle.P1) |> Vec.normalize
+                yield Triangle3d(triangle.P1, triangle.P2, midpoint)
+                yield Triangle3d(triangle.P2, triangle.P0, midpoint) |]
+
+        let private seed =
+            let corners =
+                [| V3d(1, 1, 1); V3d(-1, -1, 1); V3d(1, -1, 1); V3d(-1, 1, 1)
+                   V3d(-1, -1, -1); V3d(1, 1, -1); V3d(1, -1, -1); V3d(-1, 1, -1) |]
+                |> Array.map (fun p -> p.Normalized)
+            [| 0, 1, 2; 1, 0, 3; 4, 5, 6; 5, 4, 7; 7, 0, 5; 0, 7, 3
+               2, 4, 6; 4, 2, 1; 0, 6, 5; 6, 0, 2; 4, 3, 7; 3, 4, 1 |]
+            |> Array.map (fun (a, b, c) -> Triangle3d(corners.[a], corners.[b], corners.[c]))
+
+        let private pointBits (p : V3d) =
+            struct (BitConverter.DoubleToInt64Bits p.X, BitConverter.DoubleToInt64Bits p.Y, BitConverter.DoubleToInt64Bits p.Z)
+
+        let private triangleBits (t : Triangle3d) = struct (pointBits t.P0, pointBits t.P1, pointBits t.P2)
+
+        let private floatBits (p : V3f) =
+            struct (BitConverter.SingleToInt32Bits p.X, BitConverter.SingleToInt32Bits p.Y, BitConverter.SingleToInt32Bits p.Z)
+
+        let private coordBits (p : V2f) = struct (BitConverter.SingleToInt32Bits p.X, BitConverter.SingleToInt32Bits p.Y)
+
+        let exactSubdivision() =
+            let special =
+                [| Triangle3d(V3d(-0.0, 0.0, 1.0), V3d(0.0, 1.0, -0.0), V3d.XAxis)
+                   Triangle3d(V3d.XAxis, -V3d.XAxis, V3d.Zero)
+                   Triangle3d(V3d(Double.PositiveInfinity, 1.0, 0.0), V3d.YAxis, V3d.ZAxis)
+                   Triangle3d(V3d(Double.NaN, 0.0, 1.0), V3d.XAxis, V3d.YAxis) |]
+            for name, input in ["empty", [||]; "cube", seed; "reversed", Array.rev seed; "special", special] do
+                let mutable current = input
+                for iteration in 1 .. 3 do
+                    let context = $"input={name}, iteration={iteration}, count={current.Length}"
+                    let saved = Array.map triangleBits current
+                    let expected = referenceSubdivision current
+                    let actual = subdivide.Invoke current
+                    Expect.equal (Array.map triangleBits actual) (Array.map triangleBits expected) (context + ": exact child and vertex order")
+                    Expect.equal (Array.map triangleBits current) saved (context + ": source unchanged")
+                    if current.Length > 0 then
+                        Expect.isFalse (obj.ReferenceEquals(actual, current)) (context + ": independent result storage")
+                        actual.[0] <- Triangle3d(V3d.Zero, V3d.Zero, V3d.Zero)
+                        Expect.equal (Array.map triangleBits current) saved (context + ": result writes do not alter source")
+                    current <- expected
+            Expect.throwsT<NullReferenceException> (fun () -> subdivide.Invoke null |> ignore) "Null subdivision input keeps its failure"
+
+        let solidAttributes() =
+            let mutable expected = seed
+            for level in 0 .. List.max levels do
+                if List.contains level levels then
+                    let vertices = expected |> Array.collect (fun t -> [|t.P0; t.P1; t.P2|])
+                    let expectedPositions = vertices |> Array.map (fun (p : V3d) -> V3f p)
+                    let expectedNormals = vertices |> Array.map (fun p -> V3f p.Normalized)
+                    let expectedCoords = vertices |> Array.map (fun p -> V2f(p.SphericalFromCartesian()))
+                    let unit = SgPrimitives.Primitives.unitSphere level
+                    let context = $"level={level}"
+                    Expect.equal unit.Mode IndexedGeometryMode.TriangleList (context + ": unit mode")
+                    Expect.isNull unit.IndexArray (context + ": non-indexed unit")
+                    Expect.equal (unit.VertexCount, unit.FaceVertexCount, unit.IndexedAttributes.Count) (vertices.Length, vertices.Length, 3) (context + ": unit shape")
+                    Expect.equal (Array.map floatBits (positions unit)) (Array.map floatBits expectedPositions) (context + ": unit position order and bits")
+                    Expect.equal (Array.map floatBits (normals unit)) (Array.map floatBits expectedNormals) (context + ": unit normal order and bits")
+                    Expect.equal (Array.map coordBits (coords unit)) (Array.map coordBits expectedCoords) (context + ": unit texture coordinate order and bits")
+                    for sphere in [Sphere3d(V3d.Zero, 1.0); Sphere3d(V3d(1.25, -2.5, 3.75), 4.5); Sphere3d(V3d(-8.0, 3.0, 0.5), 0.0); Sphere3d(V3d(2.5, 0.0, -1.0), -2.25)] do
+                        let scale, translation = Trafo3d.Scale sphere.Radius, Trafo3d.Translation sphere.Center
+                        let transformed = expectedPositions |> Array.map (fun p -> V3f(translation.Forward.TransformPos(scale.Forward.TransformPos(V3d p))))
+                        for name, build in ["module", IndexedGeometryPrimitives.Sphere.solidSubdivisionSphere; "alias", IndexedGeometryPrimitives.solidSubdivisionSphere] do
+                            let color = C4b(17uy, 63uy, 129uy, 93uy)
+                            let geometry = build sphere level color
+                            let context = $"level={level}, center={sphere.Center}, radius={sphere.Radius}, builder={name}"
+                            Expect.equal (geometry.Mode, geometry.VertexCount, geometry.FaceVertexCount, geometry.IndexedAttributes.Count) (IndexedGeometryMode.TriangleList, vertices.Length, vertices.Length, 4) (context + ": solid shape")
+                            Expect.isNull geometry.IndexArray (context + ": solid indices")
+                            Expect.equal (Array.map floatBits (positions geometry)) (Array.map floatBits transformed) (context + ": transformed positions")
+                            Expect.equal (Array.map floatBits (normals geometry)) (Array.map floatBits expectedNormals) (context + ": normal compatibility")
+                            Expect.equal (Array.map coordBits (coords geometry)) (Array.map coordBits expectedCoords) (context + ": coordinate compatibility")
+                            Expect.equal (colors geometry) (Array.create vertices.Length color) (context + ": colors")
+                if level < List.max levels then expected <- referenceSubdivision expected
+
+        let subdivisionAllocation() =
+            for count in [0; 1; 12; 384; 4096] do
+                let input = Array.init count (fun i -> seed.[i % seed.Length])
+                let mutable result = [||]
+                for _ in 1 .. 32 do result <- subdivide.Invoke input
+                let before = GC.GetAllocatedBytesForCurrentThread()
+                for _ in 1 .. 32 do result <- subdivide.Invoke input
+                let allocated = GC.GetAllocatedBytesForCurrentThread() - before
+                let budget = if count = 0 then 0L else 24L + int64 count * 2L * int64 sizeof<Triangle3d> + 128L
+                Expect.isLessThanOrEqual allocated (32L * budget) $"input count={count}: one result array with fixed overhead"
+                Expect.equal result.Length (2 * count) $"input count={count}: result count"
+                GC.KeepAlive result
+
         let completeEdges() =
             for level in levels do
                 for sphere in [Sphere3d(V3d.Zero, 1.0); Sphere3d(V3d(1.25, -2.5, 3.75), 4.5); Sphere3d(V3d(-8.0, 3.0, 0.5), 0.125)] do
@@ -247,6 +343,9 @@ module Sphere =
             "Phi/theta sphere clamps low levels without malformed poles",       Cases.clampedLow
             "Phi/theta sphere has symmetric interior rings and valid topology", Cases.translatedAndScaled
 
+            "Subdivision.Exact child order and source contracts",            Subdivision.exactSubdivision
+            "Subdivision.Ordered solid attribute compatibility",             Subdivision.solidAttributes
+            "Subdivision.Bounded temporary allocation",                      Subdivision.subdivisionAllocation
             "Subdivision.Complete unique wire edges and aligned attributes", Subdivision.completeEdges
             "Subdivision.Zero-radius count compatibility",                   Subdivision.zeroRadius
             "Subdivision.Cached solid and deterministic wire templates",     Subdivision.cachedSolid
