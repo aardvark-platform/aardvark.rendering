@@ -85,6 +85,7 @@ let tests (targets: TestTarget list) =
             Utilities.MemoryManager.tests
             Utilities.Trie.tests
             Utilities.TaskUtilities.tests
+            Utilities.TaskUtilities.cancellationTests
             Utilities.LockedSet.tests
         ]
 
