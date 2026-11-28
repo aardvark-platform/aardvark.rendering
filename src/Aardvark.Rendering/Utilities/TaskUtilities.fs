@@ -78,31 +78,30 @@ module Task =
 
     let inline create (value : 'a) = Task.FromResult(value)
     
+    let private canceled<'a>() = Task.FromCanceled<'a>(CancellationToken(true))
+
+    let private mapWithOptions (options : TaskContinuationOptions) (mapping : 'a -> 'b) (task : Task<'a>) =
+        // Mapping exceptions remain continuation faults, including cancellation exceptions.
+        let cont (t : Task<'a>) =
+            if t.IsCanceled then canceled()
+            elif t.IsFaulted then raise t.Exception
+            else Task.FromResult(mapping t.Result)
+        task.ContinueWith(System.Func<_,_>(cont), options).Unwrap()
+
     let map (mapping : 'a -> 'b) (task : Task<'a>) =
-        task.ContinueWith(fun (t : Task<'a>) -> 
-            match getResult t with
-                | Completed v -> mapping v
-                | Cancelled -> raise <| OperationCanceledException()
-                | Faulted e -> raise e
-        )
+        mapWithOptions TaskContinuationOptions.None mapping task
     
     let mapInline (mapping : 'a -> 'b) (task : Task<'a>) =
-        let cont (t : Task<'a>) =
-            match getResult t with
-                | Completed v -> mapping v
-                | Cancelled -> raise <| OperationCanceledException()
-                | Faulted e -> raise e
-        task.ContinueWith(System.Func<_,_>(cont), TaskContinuationOptions.ExecuteSynchronously)
+        mapWithOptions TaskContinuationOptions.ExecuteSynchronously mapping task
 
     let map2 (mapping : 'a -> 'b -> 'c) (l : Task<'a>) (r : Task<'b>) =
-        Task.WhenAll(l, r).ContinueWith(fun (_ : Task) ->
-            match getResult l, getResult r with
-                | Completed l, Completed r -> mapping l r
-                | Faulted l, Faulted r -> raise <| AggregateException(l,r)
-                | Faulted l, _ -> raise l
-                | _, Faulted r -> raise r
-                | _ -> raise <| OperationCanceledException()
-        )
+        let cont (t : Task) =
+            if t.IsCanceled then canceled()
+            elif l.IsFaulted && r.IsFaulted then raise <| AggregateException(l.Exception, r.Exception)
+            elif l.IsFaulted then raise l.Exception
+            elif r.IsFaulted then raise r.Exception
+            else Task.FromResult(mapping l.Result r.Result)
+        Task.WhenAll(l, r).ContinueWith(System.Func<_,_>(cont)).Unwrap()
 
     let private invokeMapping (tcs : TaskCompletionSource<'b>) (mapping : 'a -> Task<'b>) (value : 'a) =
         try
@@ -141,39 +140,17 @@ module Task =
         tcs.Task
 
     let mapN (mapping : 'a[] -> 'b) (tasks : #seq<Task<'a>>) =
-        Task.WhenAll(Seq.toArray tasks).ContinueWith (fun (t : Task<'a[]>) ->
-            match getResult t with
-                | Cancelled -> raise <| OperationCanceledException()
-                | Faulted e -> raise e
-                | Completed v -> mapping v
-        )
+        Task.WhenAll(Seq.toArray tasks) |> map mapping
 
     let lift (t : Task) =
         let cont (t : Task) =
-            if t.IsCanceled then raise <| OperationCanceledException()
-            elif t.IsFaulted then raise <| t.Exception
-            elif t.IsCompleted then ()
-            else
-                try t.Wait()
-                with 
-                    | CancelledExn -> raise <| OperationCanceledException()
-                    | AggregateExn [e] -> raise e
-                    | e -> raise e
-
-        t.ContinueWith (System.Func<Task, unit>(cont), TaskContinuationOptions.ExecuteSynchronously)
+            if t.IsCanceled then canceled()
+            elif t.IsFaulted then raise t.Exception
+            else Task.FromResult(())
+        t.ContinueWith(System.Func<_,_>(cont), TaskContinuationOptions.ExecuteSynchronously).Unwrap()
 
     let ignore (t : Task<'a>) =
-        let cont (t : Task<'a>) =
-            if t.IsCanceled then raise <| OperationCanceledException()
-            elif t.IsFaulted then raise <| t.Exception
-            elif t.IsCompleted then ()
-            else
-                try t.Wait()
-                with 
-                    | CancelledExn -> raise <| OperationCanceledException()
-                    | AggregateExn [e] -> raise e
-                    | e -> raise e
-        t.ContinueWith (System.Func<Task<'a>, unit>(cont), TaskContinuationOptions.ExecuteSynchronously)
+        lift t
 
     let inline zip (l : Task<'a>) (r : Task<'b>) = map2 (fun a b -> (a,b)) l r
 
